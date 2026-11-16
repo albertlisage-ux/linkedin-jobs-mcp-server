@@ -270,6 +270,12 @@ def test_search_html_option_implies_analysis_and_writes_report(
 
     report_path = tmp_path / "comparison.html"
     monkeypatch.setattr(direct_cli, "_collect_analysis", fake_analysis)
+    opened = []
+    monkeypatch.setattr(
+        direct_cli,
+        "_open_html_report",
+        lambda path: opened.append(path) or "Google Chrome",
+    )
 
     assert (
         direct_cli.main(
@@ -288,8 +294,39 @@ def test_search_html_option_implies_analysis_and_writes_report(
     output = capsys.readouterr().out
     assert "LINKEDIN JOB FIT OVERVIEW" in output
     assert f"HTML report: {report_path.resolve()}" in output
+    assert "Opened report in Google Chrome." in output
+    assert opened == [report_path.resolve()]
     assert report_path.exists()
     assert "Job comparison" in report_path.read_text(encoding="utf-8")
+
+
+def test_no_open_keeps_html_generation_without_launching_browser(
+    monkeypatch, capsys, tmp_path
+):
+    report_path = tmp_path / "comparison.html"
+    monkeypatch.setattr(
+        direct_cli,
+        "_write_html_report",
+        lambda path, report: report_path,
+    )
+    monkeypatch.setattr(
+        direct_cli,
+        "_open_html_report",
+        lambda path: pytest.fail("browser should not be opened"),
+    )
+
+    direct_cli._write_and_open_report(
+        SimpleNamespace(
+            html=str(report_path),
+            no_open=True,
+            json=False,
+        ),
+        {},
+    )
+
+    output = capsys.readouterr().out
+    assert f"HTML report: {report_path}" in output
+    assert "Opened" not in output
 
 
 @pytest.mark.parametrize("pages", ["0", "11"])

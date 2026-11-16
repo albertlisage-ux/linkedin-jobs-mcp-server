@@ -112,11 +112,13 @@ details of the selected postings, and prints:
 - key requirements, responsibilities and a description snapshot.
 
 `search --analyze --html` writes a standalone responsive report containing the
-overview, ranking table and detailed comparison cards. `--html` also implies
-analysis, so `search "data engineer" --html report.html` is sufficient. Omitting
-the path writes `linkedin-jobs-report.html` in the current directory. The report
-includes print styles, semantic headings, accessible score labels, light/dark
-color support and no external JavaScript.
+overview, ranking table and detailed comparison cards. The report opens in
+Google Chrome automatically; add `--no-open` to write it without launching a
+browser. `--html` also implies analysis, so
+`search "data engineer" --html report.html` is sufficient. Omitting the path
+writes `linkedin-jobs-report.html` in the current directory. The report includes
+print styles, semantic headings, accessible score labels, light/dark color
+support and no external JavaScript.
 
 The score is an explainable keyword/evidence heuristic, not a hiring
 probability. To analyze a resume or profile text instead of the LinkedIn

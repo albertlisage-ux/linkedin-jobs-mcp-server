@@ -214,3 +214,7 @@ scripts/snapshot_dumps/
 
 # Debug artifacts
 .debug/
+
+# Generated local job-search reports
+linkedin-jobs-report*.html
+*-jobs-report.html

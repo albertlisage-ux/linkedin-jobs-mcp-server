@@ -10,7 +10,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import shutil
+import subprocess
 import sys
+import webbrowser
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -212,6 +216,11 @@ def _add_profile_analysis_options(parser: argparse.ArgumentParser) -> None:
             "Write a standalone HTML comparison report. Omit PATH to use "
             "linkedin-jobs-report.html."
         ),
+    )
+    parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Write the HTML report without opening it in a browser.",
     )
 
 
@@ -550,6 +559,86 @@ def _write_html_report(path: str, report: dict[str, Any]) -> Path:
     return report_path.resolve()
 
 
+def _chrome_commands() -> list[list[str]]:
+    """Browser launch commands, preferring an installed Chrome."""
+    commands: list[list[str]] = []
+    if sys.platform == "darwin":
+        chrome_app = Path("/Applications/Google Chrome.app")
+        if chrome_app.exists():
+            commands.append(["open", "-a", "Google Chrome"])
+    elif sys.platform == "win32":
+        for root in (
+            os.environ.get("PROGRAMFILES"),
+            os.environ.get("PROGRAMFILES(X86)"),
+            os.environ.get("LOCALAPPDATA"),
+        ):
+            if root:
+                executable = (
+                    Path(root)
+                    / "Google"
+                    / "Chrome"
+                    / "Application"
+                    / "chrome.exe"
+                )
+                if executable.exists():
+                    commands.append([str(executable)])
+    for name in (
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chrome",
+    ):
+        executable = shutil.which(name)
+        if executable:
+            commands.append([executable])
+    return commands
+
+
+def _open_html_report(path: Path) -> str:
+    """Open a report in Chrome, falling back to the default browser."""
+    url = path.as_uri()
+    for command in _chrome_commands():
+        try:
+            subprocess.Popen(
+                [*command, url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            continue
+        return "Google Chrome" if "Chrome" in command[-1] else command[0]
+
+    try:
+        opened = webbrowser.open(url)
+    except webbrowser.Error:
+        opened = False
+    if opened:
+        return "the default browser"
+    raise DirectCommandError(
+        "The HTML report was written, but no browser could be opened."
+    )
+
+
+def _write_and_open_report(
+    args: argparse.Namespace,
+    report: dict[str, Any],
+) -> None:
+    if not args.html:
+        return
+    report_path = _write_html_report(args.html, report)
+    stream = sys.stderr if args.json else sys.stdout
+    print(f"HTML report: {report_path}", file=stream)
+    if args.no_open:
+        return
+    try:
+        browser = _open_html_report(report_path)
+    except DirectCommandError as exc:
+        print(f"Warning: {exc}", file=sys.stderr)
+    else:
+        print(f"Opened report in {browser}.", file=stream)
+
+
 async def _collect_analysis(
     args: argparse.Namespace,
     query: str,
@@ -635,12 +724,7 @@ async def _execute(args: argparse.Namespace) -> int:
                 print(json.dumps(report, indent=2, ensure_ascii=False))
             else:
                 print(format_fit_report(report))
-            if args.html:
-                report_path = _write_html_report(args.html, report)
-                print(
-                    f"HTML report: {report_path}",
-                    file=sys.stderr if args.json else sys.stdout,
-                )
+            _write_and_open_report(args, report)
             return 0
 
         data = (
@@ -687,12 +771,7 @@ async def _execute(args: argparse.Namespace) -> int:
             print(json.dumps(report, indent=2, ensure_ascii=False))
         else:
             print(format_fit_report(report))
-        if args.html:
-            report_path = _write_html_report(args.html, report)
-            print(
-                f"HTML report: {report_path}",
-                file=sys.stderr if args.json else sys.stdout,
-            )
+        _write_and_open_report(args, report)
         return 0
 
     if args.command == "job":
