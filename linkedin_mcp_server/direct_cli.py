@@ -181,6 +181,40 @@ def _add_search_filters(
     )
 
 
+def _add_profile_analysis_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--profile-file",
+        metavar="PATH",
+        help="Use a UTF-8 resume or profile text file instead of LinkedIn profile.",
+    )
+    parser.add_argument(
+        "--profile-sections",
+        default="experience,skills",
+        metavar="LIST",
+        help=(
+            "LinkedIn profile sections to read when no profile file is supplied "
+            "(default: experience,skills)."
+        ),
+    )
+    parser.add_argument(
+        "--profile-scrolls",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Maximum Show-more clicks per profile section (default: 10).",
+    )
+    parser.add_argument(
+        "--html",
+        nargs="?",
+        const="linkedin-jobs-report.html",
+        metavar="PATH",
+        help=(
+            "Write a standalone HTML comparison report. Omit PATH to use "
+            "linkedin-jobs-report.html."
+        ),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the direct-use subcommand parser."""
     parser = argparse.ArgumentParser(
@@ -203,6 +237,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Search LinkedIn jobs and print titles, links and job IDs.",
     )
     _add_search_filters(search)
+    search.add_argument(
+        "--analyze",
+        action="store_true",
+        help="Compare the returned jobs with your profile before printing.",
+    )
+    _add_profile_analysis_options(search)
     _add_output_options(search)
     _add_browser_options(search)
 
@@ -211,27 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rank searched jobs against your profile and show evidence.",
     )
     _add_search_filters(analyze)
-    analyze.add_argument(
-        "--profile-file",
-        metavar="PATH",
-        help="Use a UTF-8 resume or profile text file instead of LinkedIn profile.",
-    )
-    analyze.add_argument(
-        "--profile-sections",
-        default="experience,skills",
-        metavar="LIST",
-        help=(
-            "LinkedIn profile sections to read when no profile file is supplied "
-            "(default: experience,skills)."
-        ),
-    )
-    analyze.add_argument(
-        "--profile-scrolls",
-        type=int,
-        default=10,
-        metavar="N",
-        help="Maximum Show-more clicks per profile section (default: 10).",
-    )
+    _add_profile_analysis_options(analyze)
     _add_output_options(analyze, default_limit=5)
     _add_browser_options(analyze)
 
@@ -518,6 +538,18 @@ def _profile_document(path: str) -> dict[str, Any]:
     }
 
 
+def _write_html_report(path: str, report: dict[str, Any]) -> Path:
+    from linkedin_mcp_server.job_analysis import render_fit_report_html
+
+    report_path = Path(path).expanduser()
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        render_fit_report_html(report),
+        encoding="utf-8",
+    )
+    return report_path.resolve()
+
+
 async def _collect_analysis(
     args: argparse.Namespace,
     query: str,
@@ -581,6 +613,36 @@ async def _execute(args: argparse.Namespace) -> int:
         query = args.query or input("Search LinkedIn jobs: ").strip()
         if not query:
             raise DirectCommandError("A search query is required.")
+        if args.analyze or args.html:
+            from linkedin_mcp_server.job_analysis import (
+                analyze_job_fit,
+                format_fit_report,
+            )
+
+            search_result, profile, details = await _collect_analysis(
+                args,
+                query,
+                tool_timeout=tool_timeout,
+            )
+            report = analyze_job_fit(
+                query=query,
+                search_result=search_result,
+                profile=profile,
+                job_details=details,
+                limit=args.limit,
+            )
+            if args.json:
+                print(json.dumps(report, indent=2, ensure_ascii=False))
+            else:
+                print(format_fit_report(report))
+            if args.html:
+                report_path = _write_html_report(args.html, report)
+                print(
+                    f"HTML report: {report_path}",
+                    file=sys.stderr if args.json else sys.stdout,
+                )
+            return 0
+
         data = (
             await _call_tools(
                 [("search_jobs", _search_arguments(args, query))],
@@ -625,6 +687,12 @@ async def _execute(args: argparse.Namespace) -> int:
             print(json.dumps(report, indent=2, ensure_ascii=False))
         else:
             print(format_fit_report(report))
+        if args.html:
+            report_path = _write_html_report(args.html, report)
+            print(
+                f"HTML report: {report_path}",
+                file=sys.stderr if args.json else sys.stdout,
+            )
         return 0
 
     if args.command == "job":

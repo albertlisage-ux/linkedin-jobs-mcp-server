@@ -8,7 +8,9 @@ terms so the reader can judge the ranking rather than treating it as a promise.
 from __future__ import annotations
 
 import re
+import html
 from collections import Counter
+from datetime import datetime
 from typing import Any
 
 
@@ -681,3 +683,579 @@ def format_fit_report(report: dict[str, Any]) -> str:
         if job.get("error"):
             lines.append(f'Posting warning: {job["error"]}')
     return "\n".join(lines)
+
+
+_REPORT_CSS = r"""
+:root {
+  color-scheme: light dark;
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-raised: #f2f6fd;
+  --foreground: #172554;
+  --muted-foreground: #4d5f7c;
+  --primary: #1e40af;
+  --secondary: #2563eb;
+  --accent: #b45309;
+  --border: #dbe7f7;
+  --strong: #166534;
+  --strong-soft: #dcfce7;
+  --good: #1d4ed8;
+  --good-soft: #dbeafe;
+  --review: #92400e;
+  --review-soft: #fef3c7;
+  --stretch: #991b1b;
+  --stretch-soft: #fee2e2;
+  --shadow: 0 18px 45px rgba(30, 64, 175, 0.09);
+  --radius: 18px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #08111f;
+    --surface: #101c2e;
+    --surface-raised: #16253b;
+    --foreground: #e8f0ff;
+    --muted-foreground: #adc0dd;
+    --primary: #8bb4ff;
+    --secondary: #67e8f9;
+    --accent: #fbbf24;
+    --border: #29405e;
+    --strong: #86efac;
+    --strong-soft: #123522;
+    --good: #93c5fd;
+    --good-soft: #142b4a;
+    --review: #fcd34d;
+    --review-soft: #3b2b08;
+    --stretch: #fca5a5;
+    --stretch-soft: #441616;
+    --shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.13), transparent 32rem),
+    var(--background);
+  color: var(--foreground);
+  font-family: "Fira Sans", "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+a { color: var(--primary); }
+a:hover { color: var(--accent); }
+a:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: -80px;
+  z-index: 100;
+  padding: 12px 16px;
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.skip-link:focus { top: 16px; }
+.shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+.hero {
+  padding: clamp(24px, 5vw, 48px);
+  background: linear-gradient(135deg, var(--surface), var(--surface-raised));
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font: 600 0.78rem/1.3 "Fira Code", ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+h1, h2, h3, h4 {
+  margin-top: 0;
+  font-family: "Fira Code", ui-monospace, monospace;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+}
+h1 { max-width: 22ch; margin-bottom: 12px; font-size: clamp(2rem, 6vw, 4rem); }
+h2 { margin-bottom: 20px; font-size: clamp(1.4rem, 3vw, 2rem); }
+h3 { margin-bottom: 8px; font-size: 1.25rem; }
+h4 { margin: 24px 0 8px; font-size: 0.95rem; }
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--muted-foreground);
+}
+.section { margin-top: 48px; }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0 0;
+}
+.stat {
+  min-height: 132px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.stat strong {
+  display: block;
+  margin-bottom: 4px;
+  font: 700 2rem/1 "Fira Code", ui-monospace, monospace;
+}
+.stat span { color: var(--muted-foreground); }
+.signals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.panel {
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  font-size: 0.88rem;
+}
+.chip.missing {
+  border-color: color-mix(in srgb, var(--stretch) 28%, var(--border));
+  background: var(--stretch-soft);
+  color: var(--stretch);
+}
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+table { width: 100%; border-collapse: collapse; }
+caption {
+  padding: 16px 20px;
+  color: var(--muted-foreground);
+  text-align: left;
+}
+th, td {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  color: var(--muted-foreground);
+  font: 600 0.78rem/1.4 "Fira Code", ui-monospace, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font: 700 1.05rem/1 "Fira Code", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.score small { color: var(--muted-foreground); font-size: 0.68rem; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.strong_match { color: var(--strong); background: var(--strong-soft); }
+.good_match { color: var(--good); background: var(--good-soft); }
+.possible_match { color: var(--review); background: var(--review-soft); }
+.stretch { color: var(--stretch); background: var(--stretch-soft); }
+.score-track {
+  height: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+.score-fill {
+  width: var(--score);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--secondary), var(--accent));
+}
+.job-list { display: grid; gap: 20px; }
+.job-card {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  scroll-margin-top: 24px;
+}
+.job-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, var(--surface-raised), var(--surface));
+  border-bottom: 1px solid var(--border);
+}
+.job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--muted-foreground);
+}
+.job-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  padding: 24px;
+}
+.job-body > .full { grid-column: 1 / -1; }
+.job-body ul { margin: 0; padding-left: 1.2rem; }
+.job-body li + li { margin-top: 7px; }
+.snapshot {
+  padding: 16px 18px;
+  border-left: 4px solid var(--secondary);
+  border-radius: 0 12px 12px 0;
+  background: var(--surface-raised);
+  color: var(--muted-foreground);
+}
+.warning {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--review-soft);
+  color: var(--review);
+}
+.methodology {
+  padding: 20px 22px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+}
+footer { margin-top: 48px; color: var(--muted-foreground); font-size: 0.9rem; }
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+.button:hover {
+  background: var(--primary);
+  color: var(--surface);
+  transition: background-color 180ms ease-out, color 180ms ease-out;
+}
+@media (max-width: 800px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .signals, .job-body { grid-template-columns: 1fr; }
+  .job-head { grid-template-columns: 1fr; }
+  .job-body > .full { grid-column: auto; }
+}
+@media (max-width: 620px) {
+  .shell { width: min(100% - 20px, 1180px); padding-top: 20px; }
+  .hero { border-radius: 20px; }
+  .stats { gap: 10px; }
+  .stat { min-height: 110px; padding: 16px; }
+  .table-wrap { overflow: visible; background: transparent; border: 0; box-shadow: none; }
+  table, thead, tbody, tr, th, td { display: block; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  tr {
+    margin-bottom: 12px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+  td { border: 0; padding: 5px 0; }
+  td[data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--muted-foreground);
+    font-weight: 600;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+@media print {
+  body { background: white; color: #111827; }
+  .shell { width: 100%; padding: 0; }
+  .hero, .stat, .panel, .table-wrap, .job-card { box-shadow: none; break-inside: avoid; }
+  .job-card { margin-bottom: 16px; }
+  .button { display: none; }
+}
+"""
+
+
+def _e(value: Any) -> str:
+    return html.escape("" if value is None else str(value), quote=True)
+
+
+def _safe_href(value: Any) -> str:
+    url = str(value or "")
+    if url.startswith(("https://", "http://")):
+        return html.escape(url, quote=True)
+    return "#"
+
+
+def _chip_list(items: list[str], *, missing: bool = False) -> str:
+    if not items:
+        return '<p class="snapshot">None detected.</p>'
+    css = "chip missing" if missing else "chip"
+    return '<div class="chips">' + "".join(
+        f'<span class="{css}">{_e(item)}</span>' for item in items
+    ) + "</div>"
+
+
+def _list_html(items: list[str], empty: str) -> str:
+    if not items:
+        return f'<p class="snapshot">{_e(empty)}</p>'
+    return "<ul>" + "".join(f"<li>{_e(item)}</li>" for item in items) + "</ul>"
+
+
+def render_fit_report_html(
+    report: dict[str, Any],
+    *,
+    generated_at: str | None = None,
+) -> str:
+    """Render a standalone, responsive comparison report."""
+    generated_at = generated_at or datetime.now().astimezone().strftime(
+        "%Y-%m-%d %H:%M %Z"
+    )
+    counts = report["rating_counts"]
+    query = _e(report.get("query"))
+    profile_url = _safe_href(report.get("profile_url"))
+    profile_label = _e(report.get("profile_url") or "Supplied profile document")
+
+    summary_rows = "".join(
+        f"""
+        <tr>
+          <td data-label="Job"><a href="#job-{_e(job['job_id'])}">{_e(job['title'])}</a></td>
+          <td data-label="Company">{_e(job.get('company') or 'Not captured')}</td>
+          <td data-label="Location">{_e(job.get('location') or 'Not specified')}</td>
+          <td data-label="Score"><span class="score">{_e(job['fit_score'])}<small>/100</small></span></td>
+          <td data-label="Assessment"><span class="badge {_e(job['fit_rating_key'])}">{_e(job['fit_rating'])}</span></td>
+          <td data-label="Matched">{_e(', '.join(job['matched_skills'][:5]) or 'No direct matches')}</td>
+        </tr>
+        """
+        for job in report["jobs"]
+    )
+
+    job_cards: list[str] = []
+    for index, job in enumerate(report["jobs"], start=1):
+        details = [
+            (
+                f'Work mode: {job["work_mode"]}'
+                if job.get("work_mode") != "unspecified"
+                else "Work mode: not clear"
+            ),
+            (
+                f'Employment: {job["employment_type"]}'
+                if job.get("employment_type") != "unspecified"
+                else "Employment type: not clear"
+            ),
+            f'Posting seniority: {job.get("job_level")}',
+            f'Profile seniority: {job.get("profile_level")}',
+        ]
+        if job.get("years_required") is not None:
+            details.append(f'{job["years_required"]}+ years requested')
+        warning = (
+            f'<p class="warning"><strong>Posting warning:</strong> '
+            f'{_e(job["error"])}</p>'
+            if job.get("error")
+            else ""
+        )
+        snapshot = (
+            f'<p class="snapshot">{_e(job["description_excerpt"])}</p>'
+            if job.get("description_excerpt")
+            else ""
+        )
+        job_cards.append(
+            f"""
+            <article class="job-card" id="job-{_e(job['job_id'])}">
+              <header class="job-head">
+                <div>
+                  <p class="eyebrow">Detailed assessment {index}</p>
+                  <h3>{_e(job['title'])}</h3>
+                  <div class="job-meta">
+                    <span>{_e(job.get('company') or 'Company not captured')}</span>
+                    <span>{_e(job.get('location') or 'Location not captured')}</span>
+                    <a href="{_safe_href(job['url'])}">Open LinkedIn posting</a>
+                  </div>
+                </div>
+                <div>
+                  <span class="badge {_e(job['fit_rating_key'])}">{_e(job['fit_rating'])}</span>
+                  <div class="score">{_e(job['fit_score'])}<small>/100</small></div>
+                  <div class="score-track" role="img" aria-label="Fit score {_e(job['fit_score'])} out of 100">
+                    <div class="score-fill" style="--score:{_e(job['fit_score'])}%"></div>
+                  </div>
+                  <p class="job-meta">{_e(job['confidence'])} confidence</p>
+                </div>
+              </header>
+              <div class="job-body">
+                <section>
+                  <h4>Matched profile evidence</h4>
+                  {_chip_list(job['matched_skills'])}
+                </section>
+                <section>
+                  <h4>Skills not found in profile</h4>
+                  {_chip_list(job['missing_skills'], missing=True)}
+                </section>
+                <section class="full">
+                  <h4>Role signals</h4>
+                  <div class="chips">
+                    {''.join(f'<span class="chip">{_e(item)}</span>' for item in details)}
+                  </div>
+                </section>
+                <section>
+                  <h4>Key requirements</h4>
+                  {_list_html(job['requirements'], 'Requirements were not isolated from this posting.')}
+                </section>
+                <section>
+                  <h4>Main responsibilities</h4>
+                  {_list_html(job['responsibilities'], 'Responsibilities were not isolated from this posting.')}
+                </section>
+                <section class="full">
+                  <h4>Posting snapshot</h4>
+                  {snapshot or '<p class="snapshot">No description snapshot was captured.</p>'}
+                  {warning}
+                  <p><a class="button" href="{_safe_href(job['url'])}">View full LinkedIn posting</a></p>
+                </section>
+              </div>
+            </article>
+            """
+        )
+
+    strengths = "".join(
+        f'<span class="chip">{_e(item["skill"])} · {_e(item["jobs"])} jobs</span>'
+        for item in report.get("common_strengths", [])
+    )
+    gaps = "".join(
+        f'<span class="chip missing">{_e(item["skill"])} · {_e(item["jobs"])} jobs</span>'
+        for item in report.get("common_gaps", [])
+    )
+    profile_link = (
+        f'<a href="{profile_url}">{profile_label}</a>'
+        if profile_url != "#"
+        else profile_label
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>LinkedIn Job Fit Report · {query}</title>
+  <style>{_REPORT_CSS}</style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to report</a>
+  <main class="shell" id="main">
+    <header class="hero">
+      <p class="eyebrow">LinkedIn job comparison</p>
+      <h1>Fit report for “{query}”</h1>
+      <div class="hero-meta">
+        <span>Generated {_e(generated_at)}</span>
+        <span>Profile: {profile_link}</span>
+        <span>{_e(report['jobs_analyzed'])} jobs analysed</span>
+      </div>
+      <p>{_e(report['methodology'])}</p>
+    </header>
+
+    <section class="section" aria-labelledby="overview-heading">
+      <h2 id="overview-heading">Overview</h2>
+      <div class="stats">
+        <div class="stat"><strong>{_e(counts['strong_match'])}</strong><span>Strong matches</span></div>
+        <div class="stat"><strong>{_e(counts['good_match'])}</strong><span>Good matches</span></div>
+        <div class="stat"><strong>{_e(counts['possible_match'])}</strong><span>Worth reviewing</span></div>
+        <div class="stat"><strong>{_e(counts['stretch'])}</strong><span>Stretch roles</span></div>
+      </div>
+      <div class="signals" style="margin-top:16px">
+        <section class="panel">
+          <h3>Repeated strengths</h3>
+          <div class="chips">{strengths or '<span class="chip">No repeated skill matches</span>'}</div>
+        </section>
+        <section class="panel">
+          <h3>Repeated gaps</h3>
+          <div class="chips">{gaps or '<span class="chip">No repeated skill gaps</span>'}</div>
+        </section>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="comparison-heading">
+      <h2 id="comparison-heading">Job comparison</h2>
+      <div class="table-wrap">
+        <table>
+          <caption>Ranked from strongest to weakest evidence match.</caption>
+          <thead>
+            <tr>
+              <th scope="col">Job</th>
+              <th scope="col">Company</th>
+              <th scope="col">Location</th>
+              <th scope="col">Score</th>
+              <th scope="col">Assessment</th>
+              <th scope="col">Matched evidence</th>
+            </tr>
+          </thead>
+          <tbody>{summary_rows}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="details-heading">
+      <h2 id="details-heading">Detailed comparison</h2>
+      <div class="job-list">{''.join(job_cards) or '<p class="panel">No job postings were returned.</p>'}</div>
+    </section>
+
+    <aside class="methodology">
+      <strong>How to read this report.</strong> A high score means more of the
+      captured posting language overlaps the profile evidence and the role/title
+      signals align. A missing skill means it was not found in the captured
+      profile sections; it does not prove the skill is absent from your
+      experience. Use the evidence to decide what to verify before applying.
+    </aside>
+    <footer>
+      Generated locally by LinkedIn Jobs MCP Server. LinkedIn is a trademark of
+      LinkedIn Corporation. This independent report is not affiliated with LinkedIn.
+    </footer>
+  </main>
+</body>
+</html>
+"""

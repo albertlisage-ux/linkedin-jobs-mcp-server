@@ -226,6 +226,72 @@ def test_analyze_command_prints_profile_match_overview(monkeypatch, capsys):
     assert "Matched evidence: Python, SQL" in output
 
 
+def test_search_html_option_implies_analysis_and_writes_report(
+    monkeypatch, capsys, tmp_path
+):
+    config = SimpleNamespace(
+        server=SimpleNamespace(tool_timeout_seconds=30.0),
+    )
+    monkeypatch.setattr(direct_cli, "_configure", lambda args: config)
+
+    async def fake_analysis(args, query, *, tool_timeout):
+        assert query == "data engineer"
+        assert args.analyze is False
+        assert args.html == str(report_path)
+        search = {
+            "url": "https://www.linkedin.com/jobs/search/",
+            "job_ids": ["101"],
+            "references": {
+                "search_results": [
+                    {
+                        "kind": "job",
+                        "url": "/jobs/view/101/",
+                        "text": "Data Engineer",
+                    }
+                ]
+            },
+        }
+        profile = {
+            "url": "https://www.linkedin.com/in/example/",
+            "sections": {"skills": "Python\nSQL"},
+        }
+        details = [
+            {
+                "url": "https://www.linkedin.com/jobs/view/101/",
+                "sections": {
+                    "job_posting": (
+                        "Data Engineer\nAcme · Berlin · Remote\n"
+                        "About the job\nBuild data systems with Python and SQL."
+                    )
+                },
+            }
+        ]
+        return search, profile, details
+
+    report_path = tmp_path / "comparison.html"
+    monkeypatch.setattr(direct_cli, "_collect_analysis", fake_analysis)
+
+    assert (
+        direct_cli.main(
+            [
+                "search",
+                "data engineer",
+                "--limit",
+                "1",
+                "--html",
+                str(report_path),
+            ]
+        )
+        == 0
+    )
+
+    output = capsys.readouterr().out
+    assert "LINKEDIN JOB FIT OVERVIEW" in output
+    assert f"HTML report: {report_path.resolve()}" in output
+    assert report_path.exists()
+    assert "Job comparison" in report_path.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("pages", ["0", "11"])
 def test_search_rejects_out_of_range_pages(pages):
     with pytest.raises(SystemExit) as raised:

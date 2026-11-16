@@ -1,6 +1,10 @@
 """Job-fit reports expose their evidence and keep their ranking explainable."""
 
-from linkedin_mcp_server.job_analysis import analyze_job_fit, format_fit_report
+from linkedin_mcp_server.job_analysis import (
+    analyze_job_fit,
+    format_fit_report,
+    render_fit_report_html,
+)
 
 
 def _search_result():
@@ -113,3 +117,24 @@ def test_overview_aggregates_strengths_and_gaps():
     assert "Matched evidence: Airflow, AWS, Python, SQL" in rendered
     assert "Not found in profile: Kubernetes" in rendered
     assert "It is not a hiring probability" in rendered
+
+
+def test_html_report_compares_overview_and_details_and_escapes_content():
+    report = analyze_job_fit(
+        query="data engineer",
+        search_result=_search_result(),
+        profile=_profile(),
+        job_details=_details(),
+    )
+    report["jobs"][0]["title"] = "<script>alert('x')</script>"
+
+    rendered = render_fit_report_html(report, generated_at="2026-11-16 12:00 CET")
+
+    assert "<!doctype html>" in rendered
+    assert "Job comparison" in rendered
+    assert "Detailed assessment" in rendered
+    assert "Matched profile evidence" in rendered
+    assert "Skills not found in profile" in rendered
+    assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in rendered
+    assert "<script>alert" not in rendered
+    assert 'aria-label="Fit score 89 out of 100"' in rendered

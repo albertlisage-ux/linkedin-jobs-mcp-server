@@ -17,7 +17,8 @@ substantive changes are:
   client, plus an `analyze` command that compares postings with the user's
   LinkedIn profile or a supplied resume text file.
 - `linkedin_mcp_server/job_analysis.py`: implements explainable skill,
-  seniority, responsibility and requirement matching with visible evidence.
+  seniority, responsibility and requirement matching with visible evidence,
+  plus a standalone responsive HTML comparison report.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.
