@@ -34,6 +34,7 @@ jobs:
         run: >-
           uv run pytest
           tests/test_jobs_only_server.py
+          tests/test_direct_cli.py
           tests/linkedin/test_jobs.py
           tests/linkedin/test_job_pages.py
           tests/test_tools.py::TestJobTools

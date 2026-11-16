@@ -56,6 +56,43 @@ uvx --from git+https://github.com/albertlisage-ux/linkedin-jobs-mcp-server.git \
 
 After signing in, retry the tool call.
 
+## Search directly from the terminal
+
+Install the command once, then use it without an MCP client:
+
+```bash
+uv tool install \
+  "git+https://github.com/albertlisage-ux/linkedin-jobs-mcp-server.git"
+
+linkedin-jobs-mcp login
+linkedin-jobs-mcp search "platform engineer" \
+  --location Berlin \
+  --remote \
+  --this-week \
+  --limit 10
+```
+
+The terminal output lists each job title, LinkedIn URL and job ID. Common
+shortcuts are `--remote`, `--hybrid`, `--on-site`, `--today` and `--this-week`.
+Use `--pages 2` or more to read additional result pages, and `--json` for
+machine-readable output.
+
+Read a posting:
+
+```bash
+linkedin-jobs-mcp job 4252026496
+linkedin-jobs-mcp job 4252026496 --apply
+```
+
+List jobs in your tracker:
+
+```bash
+linkedin-jobs-mcp saved
+linkedin-jobs-mcp saved --stage in_progress
+```
+
+If the saved session expires, run `linkedin-jobs-mcp login` again.
+
 ## MCP client configuration
 
 Add this to an MCP client that supports `stdio` servers:

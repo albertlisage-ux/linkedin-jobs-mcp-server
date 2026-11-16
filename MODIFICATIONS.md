@@ -12,6 +12,9 @@ substantive changes are:
   compatibility option for upstream tests.
 - `linkedin_mcp_server/__main__.py` and `linkedin_mcp_server/cli_main.py`: run
   the job-only server and no longer load the upstream optional remote catalog.
+- `linkedin_mcp_server/direct_cli.py`: adds `login`, `search`, `job` and
+  `saved` terminal commands so the same job tools can be used without an MCP
+  client.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.
