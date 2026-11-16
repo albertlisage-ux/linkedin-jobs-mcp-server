@@ -1,5 +1,5 @@
 """
-Authentication logic for LinkedIn MCP Server.
+Authentication logic for LinkedIn Jobs MCP Server.
 
 Handles LinkedIn session management with persistent browser profile.
 """

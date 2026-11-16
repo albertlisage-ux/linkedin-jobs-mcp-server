@@ -30,9 +30,9 @@ from linkedin_mcp_server.session_state import (
     runtime_storage_state_path,
 )
 
-ISSUE_URL = "https://github.com/stickerdaniel/linkedin-mcp-server/issues/new/choose"
+ISSUE_URL = "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server/issues/new"
 PACKET_SKILL_URL = (
-    "https://github.com/stickerdaniel/linkedin-mcp-server/blob/main/"
+    "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server/blob/main/"
     ".agents/skills/issue-packet/SKILL.md"
 )
 ISSUE_TITLE_PREFIX = "[BUG]"
@@ -267,7 +267,7 @@ def _find_existing_issues(payload: dict[str, Any]) -> list[dict[str, Any]]:
         f"{ISSUE_SEARCH_API}?q={quote_plus(query)}&per_page=3",
         headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": "linkedin-mcp-server-diagnostics",
+            "User-Agent": "linkedin-jobs-mcp-server-diagnostics",
         },
     )
     try:
@@ -303,4 +303,4 @@ def _issue_search_query(payload: dict[str, Any]) -> str:
     else:
         section = payload.get("section_name") or "read failure"
         summary = f'"{section}"'
-    return f"repo:stickerdaniel/linkedin-mcp-server is:issue is:open {summary}"
+    return f"repo:albertlisage-ux/linkedin-jobs-mcp-server is:issue is:open {summary}"

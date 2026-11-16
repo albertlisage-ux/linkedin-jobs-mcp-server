@@ -1,25 +1,9 @@
 # src/linkedin_mcp_server/__init__.py
-"""
-LinkedIn MCP Server package.
+"""LinkedIn Jobs MCP Server package.
 
-A Model Context Protocol (MCP) server that provides LinkedIn integration capabilities
-for AI assistants. This package enables secure LinkedIn profile, company, and job
-data reading through a standardized MCP interface.
-
-Key Features:
-- Secure LinkedIn authentication via session files
-- Reading LinkedIn profile, company, and job data
-- MCP-compliant server implementation using FastMCP
-- Playwright browser automation with session persistence
-- Layered configuration system with secure credential storage
-- Docker containerization for easy deployment
-- Claude Desktop MCP Bundle (MCPB, formerly DXT) support
-
-Architecture:
-- Clean separation between authentication, driver management, and MCP server
-- Singleton pattern for browser session management
-- Comprehensive error handling and logging
-- Cross-platform compatibility (macOS, Windows, Linux)
+A jobs-focused MCP server that reads LinkedIn through the user's own browser
+session. The package retains the upstream browser, authentication and page
+infrastructure while publishing job-only tools by default.
 """
 
 from importlib.metadata import PackageNotFoundError, version

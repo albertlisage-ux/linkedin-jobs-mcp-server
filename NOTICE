@@ -2,3 +2,12 @@ mcp-server-linkedin
 Copyright 2025-2026 Daniel Sticker
 
 Licensed under the Apache License, Version 2.0.
+
+LinkedIn Jobs MCP Server is a derivative of the upstream project
+https://github.com/stickerdaniel/linkedin-mcp-server at commit
+e9b47a48634200a836571b4e7c02444844038229.
+
+This derivative modifies the default MCP tool profile, server entry point,
+documentation, package metadata and product naming to focus on LinkedIn job
+workflows. The upstream copyright and license notices are retained here and in
+LICENSE.

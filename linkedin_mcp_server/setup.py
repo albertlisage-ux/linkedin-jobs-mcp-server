@@ -1,5 +1,5 @@
 """
-Interactive setup flows for LinkedIn MCP Server authentication.
+Interactive setup flows for LinkedIn Jobs MCP Server authentication.
 
 Handles session creation through interactive browser login using Patchright
 with persistent context. Profile state auto-persists to user_data_dir.
@@ -480,7 +480,7 @@ def run_profile_creation(
     else:
         profile_dir = get_profile_dir()
 
-    print("LinkedIn MCP Server - Profile Creation")
+    print("LinkedIn Jobs MCP Server - Profile Creation")
     print(f"   Profile will be saved to: {profile_dir}")
 
     async def create() -> bool:
@@ -514,7 +514,7 @@ def run_interactive_setup() -> bool:
     Returns:
         True if setup completed successfully
     """
-    print("LinkedIn MCP Server Setup")
+    print("LinkedIn Jobs MCP Server Setup")
     print("   Opening browser for manual login...")
 
     try:

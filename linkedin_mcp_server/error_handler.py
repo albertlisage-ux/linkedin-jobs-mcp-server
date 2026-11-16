@@ -1,5 +1,5 @@
 """
-Centralized error handling for LinkedIn MCP Server using FastMCP ToolError.
+Centralized error handling for LinkedIn Jobs MCP Server using FastMCP ToolError.
 
 Provides raise_tool_error() which maps known LinkedIn exceptions to user-friendly
 ToolError messages. Unknown exceptions are re-raised as-is for mask_error_details

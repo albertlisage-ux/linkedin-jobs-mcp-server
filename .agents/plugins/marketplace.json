@@ -1,11 +1,11 @@
 {
-  "name": "linkedin-mcp-server",
+  "name": "linkedin-jobs-mcp-server",
   "interface": {
-    "displayName": "LinkedIn MCP Server"
+    "displayName": "LinkedIn Jobs MCP Server"
   },
   "plugins": [
     {
-      "name": "linkedin-mcp-server",
+      "name": "linkedin-jobs-mcp-server",
       "source": {
         "source": "local",
         "path": "./plugins/linkedin-mcp-server"

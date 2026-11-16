@@ -1,14 +1,14 @@
 {
-  "name": "linkedin-mcp-server",
+  "name": "linkedin-jobs-mcp-server",
   "version": "4.30.0",
-  "description": "Research LinkedIn through a local, browser-backed MCP server.",
+  "description": "Search and inspect LinkedIn jobs through a local, browser-backed MCP server.",
   "author": {
     "name": "Daniel Sticker",
     "email": "daniel@sticker.name",
     "url": "https://daniel.sticker.name/"
   },
-  "homepage": "https://github.com/stickerdaniel/linkedin-mcp-server",
-  "repository": "https://github.com/stickerdaniel/linkedin-mcp-server",
+  "homepage": "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server",
+  "repository": "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server",
   "license": "Apache-2.0",
   "keywords": [
     "linkedin",
@@ -18,9 +18,9 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "LinkedIn MCP",
-    "shortDescription": "Research profiles, companies, jobs, posts, and messages.",
-    "longDescription": "Use your own LinkedIn browser session to research profiles, companies, jobs, posts, and messages in Codex. Write actions require an explicit request. Independent open-source project. Not affiliated with LinkedIn or Microsoft. LinkedIn is a trademark of LinkedIn Corporation.",
+    "displayName": "LinkedIn Jobs MCP",
+    "shortDescription": "Search, inspect and track LinkedIn jobs.",
+    "longDescription": "Use your own LinkedIn browser session to search jobs, read postings, inspect application methods and Easy Apply forms, and track saved jobs in Codex. Independent open-source project. Not affiliated with LinkedIn or Microsoft. LinkedIn is a trademark of LinkedIn Corporation.",
     "developerName": "Daniel Sticker",
     "category": "Business & Operations",
     "capabilities": [
@@ -28,11 +28,11 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/stickerdaniel/linkedin-mcp-server",
+    "websiteURL": "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server",
     "defaultPrompt": [
-      "Show my LinkedIn profile.",
-      "Research a company on LinkedIn.",
-      "Find LinkedIn jobs that match my criteria."
+      "Find remote Python jobs posted this week.",
+      "Read a LinkedIn job posting and summarize its requirements.",
+      "List the jobs I have in progress on LinkedIn."
     ],
     "brandColor": "#0A66C2",
     "composerIcon": "./assets/icon.svg",

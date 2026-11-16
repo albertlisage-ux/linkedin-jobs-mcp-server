@@ -1,15 +1,14 @@
-"""
-FastMCP server implementation for LinkedIn integration with tool registration.
+"""FastMCP server implementation for the LinkedIn Jobs MCP Server.
 
-Creates and configures the MCP server with comprehensive LinkedIn tool suite including
-person profiles, company data, job information, and session management capabilities.
+The default tool profile is deliberately limited to job search, posting,
+application inspection and job-tracker workflows.
 """
 
 import asyncio
 import hashlib
 import hmac
 import logging
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Literal
 
 from fastmcp import FastMCP
 
@@ -44,12 +43,7 @@ from linkedin_mcp_server.server_role import (
 )
 from linkedin_mcp_server.session_status import session_status
 from linkedin_mcp_server.update_check import UpdateNoticeMiddleware
-from linkedin_mcp_server.tools.company import register_company_tools
-from linkedin_mcp_server.tools.feed import register_feed_tools
 from linkedin_mcp_server.tools.job import register_job_tools
-from linkedin_mcp_server.tools.messaging import register_messaging_tools
-from linkedin_mcp_server.tools.person import register_person_tools
-from linkedin_mcp_server.tools.post import register_post_tools
 
 if TYPE_CHECKING:
     from linkedin_mcp_server.daemon.discovery import Unanswered
@@ -58,22 +52,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# For clients that never load the plugin skill. Every client reads this on
-# every turn, so it holds only lines that measurably changed what cheap
-# client models did (Claude Haiku 5.5, GPT-5.6 Terra). Rules they already
-# follow unprompted, such as reading only what a request needs, are left out,
-# and a generic "retry once" made Haiku retry while setup was still running.
-_SERVER_INSTRUCTIONS = """\
-send_message and connect_with_person act for the user. Use them only for the
-exact action, recipient and text the user approved; when the user asks for a
-draft, or for something these tools cannot do, reply with the text instead. If
-a write's outcome is unknown, ask the user to check LinkedIn before acting
-again.
+# Read by every client at the start of a session. Keep this focused on the
+# jobs workflow so the model does not expect profile or messaging tools.
+_JOBS_INSTRUCTIONS = """\
+This server is focused on LinkedIn jobs. Use search_jobs to discover postings,
+then get_job_details or get_job_apply_url for a selected job ID. Use
+get_saved_jobs to inspect the authenticated user's job tracker.
 
-Report what the tools returned, and say when a result may be incomplete.
+The server reads LinkedIn through the user's own browser session. Report what
+the tools returned, and say when a search may be broader or incomplete because
+LinkedIn dropped a filter or stopped pagination.
 
-If LinkedIn waits for a captcha or other verification, ask the user to
-complete it in the browser, then continue when they say so.
+get_easy_apply_form only inspects a form; it never submits an application or
+keeps a draft. If LinkedIn asks for a captcha or another verification, ask the
+user to complete it in the browser and then retry.
 """
 
 
@@ -116,7 +108,7 @@ async def browser_lifespan(app: FastMCP) -> AsyncIterator[dict[str, Any]]:
     sessions are checkpoint-committed when they are created.
     """
     del app
-    logger.info("LinkedIn MCP Server starting...")
+    logger.info("LinkedIn Jobs MCP Server starting...")
     initialize_bootstrap(get_runtime_policy())
     handoff_watch: asyncio.Task[None] | None = None
     try:
@@ -135,7 +127,7 @@ async def browser_lifespan(app: FastMCP) -> AsyncIterator[dict[str, Any]]:
         )
         yield {}
     finally:
-        logger.info("LinkedIn MCP Server shutting down...")
+        logger.info("LinkedIn Jobs MCP Server shutting down...")
         try:
             if handoff_watch is not None:
                 handoff_watch.cancel()
@@ -172,15 +164,16 @@ def create_mcp_server(
     *,
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT_SECONDS,
     role: ServerRole = ServerRole.DIRECT,
+    toolset: Literal["jobs", "full"] = "jobs",
     auth_token: str | None = None,
     proxy_backend: "DaemonProxyBackend | None" = None,
     silent_owner: "Unanswered | None" = None,
 ) -> FastMCP:
-    """Create and configure the MCP server with all LinkedIn tools.
+    """Create and configure the LinkedIn Jobs MCP server.
 
     *role* selects which parts belong to this process. It defaults to
-    :attr:`ServerRole.DIRECT`, which is exactly the historical server, so every
-    existing caller keeps what it had.
+    :attr:`ServerRole.DIRECT`. *toolset* defaults to ``jobs``; ``full`` keeps
+    the upstream tool registrations available for compatibility and tests.
 
     *auth_token* is the bearer token a daemon owner requires. Only an owner has
     one: it listens on a loopback port that every process on the machine can
@@ -196,6 +189,8 @@ def create_mcp_server(
     *silent_owner* is the shared owner a Direct server fell back from because
     it did not answer the election, named when the profile stays busy.
     """
+    if toolset not in ("jobs", "full"):
+        raise ValueError("toolset must be 'jobs' or 'full'")
     if auth_token is not None and role is not ServerRole.OWNER:
         # A token on a stdio server protects nothing — there is no port to
         # protect — and passing one is a caller that believes it built the
@@ -234,12 +229,12 @@ def create_mcp_server(
     set_process_role(role)
 
     mcp = FastMCP(
-        "mcp-server-linkedin",
+        "linkedin-jobs-mcp-server",
         version=__version__,
         # Before any role wiring, and not only on a role that drives a browser.
         # A proxy registers no local tools, but it is the server the client
         # initializes, so gating this would leave that client with no rules.
-        instructions=_SERVER_INSTRUCTIONS,
+        instructions=_JOBS_INSTRUCTIONS,
         # Selected here rather than gated inside, because for a proxy every step
         # of it is wrong: it would install a Chromium this process never opens,
         # and then claim to be closing a browser it never had.
@@ -324,12 +319,19 @@ def create_mcp_server(
     # Every local registration below drives Chromium, so a proxy takes none of
     # them and serves the owner's through the provider above instead.
     if role.drives_browser:
-        register_person_tools(mcp, tool_timeout=tool_timeout)
-        register_company_tools(mcp, tool_timeout=tool_timeout)
         register_job_tools(mcp, tool_timeout=tool_timeout)
-        register_messaging_tools(mcp, tool_timeout=tool_timeout)
-        register_feed_tools(mcp, tool_timeout=tool_timeout)
-        register_post_tools(mcp, tool_timeout=tool_timeout)
+        if toolset == "full":
+            from linkedin_mcp_server.tools.company import register_company_tools
+            from linkedin_mcp_server.tools.feed import register_feed_tools
+            from linkedin_mcp_server.tools.messaging import register_messaging_tools
+            from linkedin_mcp_server.tools.person import register_person_tools
+            from linkedin_mcp_server.tools.post import register_post_tools
+
+            register_person_tools(mcp, tool_timeout=tool_timeout)
+            register_company_tools(mcp, tool_timeout=tool_timeout)
+            register_messaging_tools(mcp, tool_timeout=tool_timeout)
+            register_feed_tools(mcp, tool_timeout=tool_timeout)
+            register_post_tools(mcp, tool_timeout=tool_timeout)
 
         # Inside the gate with the rest, and easy to miss because it is the one
         # tool defined here rather than in a `register_*` call. Left out of the

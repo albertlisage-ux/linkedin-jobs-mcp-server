@@ -1,4 +1,4 @@
-"""LinkedIn MCP Server main CLI application entry point."""
+"""LinkedIn Jobs MCP Server main CLI application entry point."""
 
 import asyncio
 import logging
@@ -55,9 +55,7 @@ from linkedin_mcp_server.session_state import (
     runtime_storage_state_path,
     source_state_path,
 )
-from linkedin_mcp_server import remote_tools
 from linkedin_mcp_server.server import ServerRole, create_mcp_server
-from linkedin_mcp_server.server_role import process_role
 from linkedin_mcp_server.setup import run_profile_creation
 
 if TYPE_CHECKING:
@@ -373,7 +371,7 @@ def clear_profile_and_exit() -> None:
     )
 
     version = get_version()
-    logger.info(f"LinkedIn MCP Server v{version} - Profile Clear mode")
+    logger.info(f"LinkedIn Jobs MCP Server v{version} - Profile Clear mode")
 
     auth_root = get_profile_dir().parent
 
@@ -453,7 +451,7 @@ def get_profile_and_exit() -> None:
     )
 
     version = get_version()
-    logger.info(f"LinkedIn MCP Server v{version} - Session Creation mode")
+    logger.info(f"LinkedIn Jobs MCP Server v{version} - Session Creation mode")
 
     # The login already waits for the profile (`setup.interactive_login`), which
     # is the whole of what a retiring owner needs from it.
@@ -474,7 +472,7 @@ def import_from_browser_and_exit() -> None:
         log_level=config.server.log_level,
         json_format=not config.is_interactive and config.server.log_level != "DEBUG",
     )
-    logger.info("LinkedIn MCP Server v%s - Browser Import mode", get_version())
+    logger.info("LinkedIn Jobs MCP Server v%s - Browser Import mode", get_version())
 
     configure_browser_environment()
     set_headless(True)  # validation runs headless
@@ -549,7 +547,7 @@ def profile_info_and_exit() -> None:
     )
 
     version = get_version()
-    logger.info(f"LinkedIn MCP Server v{version} - Session Info mode")
+    logger.info(f"LinkedIn Jobs MCP Server v{version} - Session Info mode")
 
     profile_dir = get_profile_dir()
     cookies_path = portable_cookie_path(profile_dir)
@@ -823,10 +821,10 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     # Print banner in interactive mode
     if config.is_interactive:
-        print(f"🔗 LinkedIn MCP Server v{version} 🔗")
+        print(f"🔗 LinkedIn Jobs MCP Server v{version} 🔗")
         print("=" * 40)
 
-    logger.info(f"LinkedIn MCP Server v{version}")
+    logger.info(f"LinkedIn Jobs MCP Server v{version}")
 
     try:
         configure_browser_environment()
@@ -930,12 +928,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                     role=ServerRole.PROXY,
                     proxy_backend=shared,
                 )
-
-            # Direct only: a proxy serves the owner's tools, and the owner has
-            # no client of its own. Before `run`, which reads the tool list and
-            # the instructions once per client.
-            if process_role() is ServerRole.DIRECT:
-                remote_tools.install(mcp)
 
             if transport == "streamable-http":
                 # Validate Host and Origin. Without this a website the user

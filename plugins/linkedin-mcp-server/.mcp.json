@@ -1,9 +1,11 @@
 {
   "mcpServers": {
-    "linkedin": {
+    "linkedin-jobs": {
       "command": "uvx",
       "args": [
-        "mcp-server-linkedin@latest",
+        "--from",
+        "git+https://github.com/albertlisage-ux/linkedin-jobs-mcp-server.git",
+        "linkedin-jobs-mcp",
         "--transport",
         "stdio"
       ],

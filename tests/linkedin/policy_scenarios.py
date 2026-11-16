@@ -1237,7 +1237,7 @@ async def _facade_contract_trace() -> dict[str, Any]:
             "coroutine": inspect.iscoroutinefunction(member),
         }
     if _TOOL_SCHEMAS is None:
-        tools = await create_mcp_server().list_tools()
+        tools = await create_mcp_server(toolset="full").list_tools()
         _TOOL_SCHEMAS = {
             tool.name: {
                 "input": tool.parameters,

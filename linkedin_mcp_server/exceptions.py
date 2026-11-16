@@ -1,6 +1,6 @@
 # src/linkedin_mcp_server/exceptions.py
 """
-Custom exceptions for LinkedIn MCP Server with specific error categorization.
+Custom exceptions for LinkedIn Jobs MCP Server with specific error categorization.
 
 Defines hierarchical exception types for different error scenarios including
 authentication failures and MCP client reporting.
@@ -8,7 +8,7 @@ authentication failures and MCP client reporting.
 
 
 class LinkedInMCPError(Exception):
-    """Base exception for LinkedIn MCP Server."""
+    """Base exception for LinkedIn Jobs MCP Server."""
 
     pass
 

@@ -1,7 +1,7 @@
 [project]
 name = "mcp-server-linkedin"
 version = "4.30.0"
-description = "MCP server that gives AI assistants like Claude access to LinkedIn profiles, companies, and job postings through the user's own browser session."
+description = "Jobs-focused MCP server for searching and inspecting LinkedIn postings through the user's own browser session."
 readme = "README.md"
 requires-python = ">=3.12.4,<3.15"
 authors = [
@@ -21,6 +21,8 @@ license-files = ["LICENSE", "NOTICE"]
 keywords = [
     "mcp",
     "model-context-protocol",
+    "linkedin-jobs",
+    "job-search",
     "ai",
     "llm",
     "anthropic",
@@ -57,13 +59,15 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/stickerdaniel/linkedin-mcp-server"
-Documentation = "https://github.com/stickerdaniel/linkedin-mcp-server#readme"
-Repository = "https://github.com/stickerdaniel/linkedin-mcp-server"
-Issues = "https://github.com/stickerdaniel/linkedin-mcp-server/issues"
-Changelog = "https://github.com/stickerdaniel/linkedin-mcp-server/releases"
+Homepage = "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server"
+Documentation = "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server#readme"
+Repository = "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server"
+Issues = "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server/issues"
+Changelog = "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server/releases"
+Upstream = "https://github.com/stickerdaniel/linkedin-mcp-server"
 
 [project.scripts]
+linkedin-jobs-mcp = "linkedin_mcp_server.__main__:main"
 mcp-server-linkedin = "linkedin_mcp_server.__main__:main"
 
 [build-system]
@@ -130,7 +134,7 @@ directory = "changelog.d"
 filename = "docs/CHANGELOG.md"
 start_string = "<!-- towncrier release notes start -->\n"
 title_format = "## {version} ({project_date})"
-issue_format = "[#{issue}](https://github.com/stickerdaniel/linkedin-mcp-server/pull/{issue})"
+issue_format = "[#{issue}](https://github.com/albertlisage-ux/linkedin-jobs-mcp-server/pull/{issue})"
 # An empty list, not an absent key: only then does `towncrier build` refuse a
 # fragment of an unknown type instead of leaving it out in silence.
 ignore = []

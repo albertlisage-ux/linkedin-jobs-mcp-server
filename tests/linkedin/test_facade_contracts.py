@@ -125,7 +125,7 @@ def test_permanent_facade_aliases_are_the_canonical_objects():
 
 
 async def test_registered_tools_match_extractor_delegates():
-    tools = await create_mcp_server().list_tools()
+    tools = await create_mcp_server(toolset="full").list_tools()
     tool_names = {tool.name for tool in tools}
 
     # The two session tools read no LinkedIn page, so neither has a delegate.
@@ -136,7 +136,7 @@ async def test_registered_tools_match_extractor_delegates():
 
 
 async def test_company_posts_delegate_matches_registered_tool_consumer():
-    tool = await create_mcp_server().get_tool("get_company_posts")
+    tool = await create_mcp_server(toolset="full").get_tool("get_company_posts")
     assert isinstance(tool, FunctionTool)
     extractor = SimpleNamespace(
         extract_page=AsyncMock(

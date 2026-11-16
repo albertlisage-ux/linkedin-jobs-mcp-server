@@ -970,7 +970,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser is imported; a test compares the two.
     """
     parser = argparse.ArgumentParser(
-        description="LinkedIn MCP Server - A Model Context Protocol server for LinkedIn integration"
+        description=(
+            "LinkedIn Jobs MCP Server - search and inspect LinkedIn jobs through "
+            "the user's own browser session"
+        )
     )
     for setting in SETTINGS:
         if setting.cli is not None:

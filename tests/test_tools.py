@@ -2966,25 +2966,14 @@ class TestToolTimeouts:
         mcp = create_mcp_server(tool_timeout=custom_timeout)
 
         tool_names = (
-            "get_person_profile",
-            "connect_with_person",
-            "get_sidebar_profiles",
-            "search_people",
-            "get_company_profile",
-            "get_company_posts",
             "get_job_details",
             "get_job_apply_url",
+            "get_easy_apply_form",
             "search_jobs",
             "get_saved_jobs",
-            "get_inbox",
-            "get_conversation",
-            "search_conversations",
-            "archive_conversation",
-            "send_message",
-            "reply_to_conversation",
-            "get_feed",
-            "search_posts",
+            "dismiss_job",
             "close_session",
+            "get_session_status",
         )
 
         for name in tool_names:
@@ -2999,28 +2988,14 @@ class TestToolTimeouts:
         mcp = create_mcp_server()
 
         tool_names = (
-            "get_person_profile",
-            "get_my_profile",
-            "connect_with_person",
-            "get_sidebar_profiles",
-            "search_people",
-            "get_company_profile",
-            "get_company_posts",
-            "search_companies",
-            "get_company_employees",
             "get_job_details",
             "get_job_apply_url",
+            "get_easy_apply_form",
             "search_jobs",
             "get_saved_jobs",
-            "get_inbox",
-            "get_conversation",
-            "search_conversations",
-            "archive_conversation",
-            "send_message",
-            "reply_to_conversation",
-            "get_feed",
-            "search_posts",
+            "dismiss_job",
             "close_session",
+            "get_session_status",
         )
 
         for name in tool_names:

@@ -1,6 +1,6 @@
 """Background check for a newer release on PyPI, surfaced as a tool-result notice.
 
-Most users install via ``uvx mcp-server-linkedin@latest``, which re-resolves PyPI
+Most users install from this repository's Git URL, which re-resolves on launch.
 on every client launch, so they are already current. This is defense-in-depth for
 the minority that pin a fixed version, run a stale Docker tag, or are offline: it
 polls the PyPI JSON API at most once a day, caches the answer under
@@ -35,9 +35,9 @@ from linkedin_mcp_server.remote_tools import is_remote
 
 logger = logging.getLogger(__name__)
 
-_PYPI_URL = "https://pypi.org/pypi/mcp-server-linkedin/json"
+_PYPI_URL = "https://pypi.org/pypi/linkedin-jobs-mcp-server/json"
 _LATEST_RELEASE_URL = (
-    "https://github.com/stickerdaniel/linkedin-mcp-server/releases/latest"
+    "https://github.com/albertlisage-ux/linkedin-jobs-mcp-server/releases/latest"
 )
 _CACHE_PATH = Path.home() / ".linkedin-mcp" / "update-check.json"
 _CACHE_TTL_SECONDS = 24 * 60 * 60
@@ -107,7 +107,7 @@ def _fetch_latest_from_pypi() -> str | None:
         _PYPI_URL,
         headers={
             "Accept": "application/json",
-            "User-Agent": f"mcp-server-linkedin/{__version__}",
+            "User-Agent": f"linkedin-jobs-mcp-server/{__version__}",
         },
     )
     try:
@@ -213,8 +213,9 @@ def _update_action() -> str:
         )
     return (
         "Check this server's entry in the MCP client config: it should run "
-        '"uvx mcp-server-linkedin@latest" rather than a pinned version. If it pins a '
-        "version or drops @latest, fix it and restart the client."
+        '"uvx --from git+https://github.com/albertlisage-ux/linkedin-jobs-mcp-server.git '
+        'linkedin-jobs-mcp" rather than a pinned commit or version. If it pins one '
+        "or drops the source URL, fix it and restart the client."
     )
 
 
@@ -232,7 +233,7 @@ def pending_update_notice() -> str | None:
     if not _is_meaningfully_behind(current, latest):
         return None
     return (
-        f"Update available: mcp-server-linkedin {latest} is out (you are on "
+        f"Update available: linkedin-jobs-mcp-server {latest} is out (you are on "
         f"{current}). {_update_action()}"
     )
 

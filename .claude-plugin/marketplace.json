@@ -1,17 +1,17 @@
 {
-  "name": "linkedin-mcp-server",
+  "name": "linkedin-jobs-mcp-server",
   "owner": {
     "name": "Daniel Sticker",
     "url": "https://daniel.sticker.name/"
   },
   "metadata": {
-    "description": "The LinkedIn MCP Server plugin: a local, browser-backed MCP server and its skill."
+    "description": "The LinkedIn Jobs MCP Server plugin: a local, browser-backed job-search server and its skill."
   },
   "plugins": [
     {
-      "name": "linkedin-mcp-server",
+      "name": "linkedin-jobs-mcp-server",
       "source": "./plugins/linkedin-mcp-server",
-      "description": "Research LinkedIn through a local, browser-backed MCP server."
+      "description": "Search and inspect LinkedIn jobs through a local, browser-backed MCP server."
     }
   ]
 }

@@ -84,16 +84,17 @@ _THE_OWNER_IS_GONE = (
 #: server: the contract is this text, including the write-authorization rule
 #: and the user-owned verification step.
 _THE_OPERATING_RULES = """\
-send_message and connect_with_person act for the user. Use them only for the
-exact action, recipient and text the user approved; when the user asks for a
-draft, or for something these tools cannot do, reply with the text instead. If
-a write's outcome is unknown, ask the user to check LinkedIn before acting
-again.
+This server is focused on LinkedIn jobs. Use search_jobs to discover postings,
+then get_job_details or get_job_apply_url for a selected job ID. Use
+get_saved_jobs to inspect the authenticated user's job tracker.
 
-Report what the tools returned, and say when a result may be incomplete.
+The server reads LinkedIn through the user's own browser session. Report what
+the tools returned, and say when a search may be broader or incomplete because
+LinkedIn dropped a filter or stopped pagination.
 
-If LinkedIn waits for a captcha or other verification, ask the user to
-complete it in the browser, then continue when they say so.
+get_easy_apply_form only inspects a form; it never submits an application or
+keeps a draft. If LinkedIn asks for a captcha or another verification, ask the
+user to complete it in the browser and then retry.
 """
 
 
@@ -375,7 +376,7 @@ class TestServerRoles:
 
         assert len(served) > 1
         assert len(set(map(frozenset, served.values()))) == 1
-        assert "get_person_profile" in served[ServerRole.DIRECT]
+        assert "search_jobs" in served[ServerRole.DIRECT]
 
     def test_the_role_is_readable_without_importing_the_server(self):
         # The reason the enum lives in its own module. Behaviour has to differ
