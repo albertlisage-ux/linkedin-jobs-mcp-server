@@ -173,6 +173,59 @@ def test_job_command_can_include_application_type(monkeypatch, capsys):
     assert "Application type: easy_apply" in output
 
 
+def test_analyze_command_prints_profile_match_overview(monkeypatch, capsys):
+    config = SimpleNamespace(
+        server=SimpleNamespace(tool_timeout_seconds=30.0),
+    )
+    monkeypatch.setattr(direct_cli, "_configure", lambda args: config)
+
+    async def fake_analysis(args, query, *, tool_timeout):
+        assert query == "data engineer"
+        assert args.limit == 1
+        assert tool_timeout == 30.0
+        search = {
+            "url": "https://www.linkedin.com/jobs/search/",
+            "job_ids": ["101"],
+            "references": {
+                "search_results": [
+                    {
+                        "kind": "job",
+                        "url": "/jobs/view/101/",
+                        "text": "Data Engineer",
+                    }
+                ]
+            },
+        }
+        profile = {
+            "url": "https://www.linkedin.com/in/example/",
+            "sections": {
+                "experience": "Senior Data Engineer",
+                "skills": "Python\nSQL",
+            },
+        }
+        details = [
+            {
+                "url": "https://www.linkedin.com/jobs/view/101/",
+                "sections": {
+                    "job_posting": (
+                        "Data Engineer\nAcme · Berlin · Remote\n"
+                        "About the job\nBuild data systems with Python and SQL."
+                    )
+                },
+            }
+        ]
+        return search, profile, details
+
+    monkeypatch.setattr(direct_cli, "_collect_analysis", fake_analysis)
+
+    assert direct_cli.main(["analyze", "data engineer", "--limit", "1"]) == 0
+
+    output = capsys.readouterr().out
+    assert "LINKEDIN JOB FIT OVERVIEW" in output
+    assert "[Strong match] Data Engineer" in output
+    assert "Matched evidence: Python, SQL" in output
+
+
 @pytest.mark.parametrize("pages", ["0", "11"])
 def test_search_rejects_out_of_range_pages(pages):
     with pytest.raises(SystemExit) as raised:

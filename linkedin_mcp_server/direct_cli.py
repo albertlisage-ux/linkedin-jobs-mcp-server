@@ -72,7 +72,11 @@ def _add_browser_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_output_options(parser: argparse.ArgumentParser) -> None:
+def _add_output_options(
+    parser: argparse.ArgumentParser,
+    *,
+    default_limit: int = 20,
+) -> None:
     parser.add_argument(
         "--json",
         action="store_true",
@@ -81,47 +85,34 @@ def _add_output_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--limit",
         type=int,
-        default=20,
+        default=default_limit,
         metavar="N",
-        help="Maximum jobs to print; 0 prints all returned jobs (default: 20).",
-    )
-
-
-def build_parser() -> argparse.ArgumentParser:
-    """Build the direct-use subcommand parser."""
-    parser = argparse.ArgumentParser(
-        prog="linkedin-jobs-mcp",
-        description=(
-            "Search and inspect LinkedIn jobs directly. Running without a "
-            "subcommand starts the MCP server."
+        help=(
+            "Maximum jobs to print; 0 prints all returned jobs "
+            f"(default: {default_limit})."
         ),
     )
-    commands = parser.add_subparsers(dest="command", required=True)
 
-    login = commands.add_parser(
-        "login",
-        help="Sign in through a visible browser and save the session.",
-    )
-    _add_browser_options(login)
 
-    search = commands.add_parser(
-        "search",
-        help="Search LinkedIn jobs and print titles, links and job IDs.",
-    )
-    search.add_argument(
+def _add_search_filters(
+    parser: argparse.ArgumentParser,
+    *,
+    default_pages: int = 1,
+) -> None:
+    parser.add_argument(
         "query",
         nargs="?",
         help="Search keywords; prompts when omitted.",
     )
-    search.add_argument("--location", help="City, region, country or Remote.")
-    search.add_argument(
+    parser.add_argument("--location", help="City, region, country or Remote.")
+    parser.add_argument(
         "--pages",
         type=int,
-        default=1,
+        default=default_pages,
         metavar="N",
-        help="LinkedIn result pages to read, 1-10 (default: 1).",
+        help=f"LinkedIn result pages to read, 1-10 (default: {default_pages}).",
     )
-    posted = search.add_mutually_exclusive_group()
+    posted = parser.add_mutually_exclusive_group()
     posted.add_argument(
         "--posted",
         choices=DATE_POSTED_CHOICES,
@@ -141,17 +132,17 @@ def build_parser() -> argparse.ArgumentParser:
         const="past_week",
         help="Only jobs posted in the last week.",
     )
-    search.add_argument(
+    parser.add_argument(
         "--job-type",
         choices=JOB_TYPE_CHOICES,
         help="Filter by employment type.",
     )
-    search.add_argument(
+    parser.add_argument(
         "--experience",
         choices=EXPERIENCE_CHOICES,
         help="Filter by experience level.",
     )
-    work_type = search.add_mutually_exclusive_group()
+    work_type = parser.add_mutually_exclusive_group()
     work_type.add_argument(
         "--work-type",
         choices=WORK_TYPE_CHOICES,
@@ -178,18 +169,71 @@ def build_parser() -> argparse.ArgumentParser:
         const="on_site",
         help="Shortcut for --work-type on_site.",
     )
-    search.add_argument(
+    parser.add_argument(
         "--easy-apply",
         action="store_true",
         help="Only show Easy Apply jobs.",
     )
-    search.add_argument(
+    parser.add_argument(
         "--sort",
         choices=("date", "relevance"),
         help="Result ordering.",
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the direct-use subcommand parser."""
+    parser = argparse.ArgumentParser(
+        prog="linkedin-jobs-mcp",
+        description=(
+            "Search and inspect LinkedIn jobs directly. Running without a "
+            "subcommand starts the MCP server."
+        ),
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    login = commands.add_parser(
+        "login",
+        help="Sign in through a visible browser and save the session.",
+    )
+    _add_browser_options(login)
+
+    search = commands.add_parser(
+        "search",
+        help="Search LinkedIn jobs and print titles, links and job IDs.",
+    )
+    _add_search_filters(search)
     _add_output_options(search)
     _add_browser_options(search)
+
+    analyze = commands.add_parser(
+        "analyze",
+        help="Rank searched jobs against your profile and show evidence.",
+    )
+    _add_search_filters(analyze)
+    analyze.add_argument(
+        "--profile-file",
+        metavar="PATH",
+        help="Use a UTF-8 resume or profile text file instead of LinkedIn profile.",
+    )
+    analyze.add_argument(
+        "--profile-sections",
+        default="experience,skills",
+        metavar="LIST",
+        help=(
+            "LinkedIn profile sections to read when no profile file is supplied "
+            "(default: experience,skills)."
+        ),
+    )
+    analyze.add_argument(
+        "--profile-scrolls",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Maximum Show-more clicks per profile section (default: 10).",
+    )
+    _add_output_options(analyze, default_limit=5)
+    _add_browser_options(analyze)
 
     job = commands.add_parser(
         "job",
@@ -288,18 +332,34 @@ async def _call_tools(
     calls: Sequence[tuple[str, dict[str, Any]]],
     *,
     tool_timeout: float,
+    toolset: str = "jobs",
+    tolerate_errors_from: int | None = None,
 ) -> list[dict[str, Any]]:
     from fastmcp import Client
 
     from linkedin_mcp_server.server import create_mcp_server
 
-    server = create_mcp_server(tool_timeout=tool_timeout)
+    server = create_mcp_server(tool_timeout=tool_timeout, toolset=toolset)
     answers: list[dict[str, Any]] = []
     async with Client(server) as client:
-        for name, arguments in calls:
-            answers.append(
-                _structured_result(await client.call_tool(name, arguments))
-            )
+        for index, (name, arguments) in enumerate(calls):
+            try:
+                answers.append(
+                    _structured_result(await client.call_tool(name, arguments))
+                )
+            except DirectCommandError as exc:
+                if tolerate_errors_from is None or index < tolerate_errors_from:
+                    raise
+                answers.append(
+                    {
+                        "url": f"https://www.linkedin.com/jobs/view/"
+                        f"{arguments.get('job_id', '')}/",
+                        "sections": {},
+                        "section_errors": {
+                            "analysis": {"error_message": str(exc)}
+                        },
+                    }
+                )
     return answers
 
 
@@ -439,6 +499,82 @@ def _search_arguments(args: argparse.Namespace, query: str) -> dict[str, Any]:
     }
 
 
+def _profile_document(path: str) -> dict[str, Any]:
+    profile_path = Path(path).expanduser()
+    try:
+        text = profile_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise DirectCommandError(
+            "The profile file must be UTF-8 text. Convert a PDF or Word "
+            "document to plain text before using --profile-file."
+        ) from exc
+    except OSError as exc:
+        raise DirectCommandError(f"Could not read profile file: {exc}") from exc
+    if not text.strip():
+        raise DirectCommandError("The profile file is empty.")
+    return {
+        "url": str(profile_path),
+        "sections": {"profile_document": text},
+    }
+
+
+async def _collect_analysis(
+    args: argparse.Namespace,
+    query: str,
+    *,
+    tool_timeout: float,
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    """Read search, profile and selected postings through one browser session."""
+    from fastmcp import Client
+
+    from linkedin_mcp_server.server import create_mcp_server
+
+    profile = _profile_document(args.profile_file) if args.profile_file else None
+    toolset = "jobs" if profile is not None else "full"
+    server = create_mcp_server(tool_timeout=tool_timeout, toolset=toolset)
+    async with Client(server) as client:
+        search_result = _structured_result(
+            await client.call_tool(
+                "search_jobs", _search_arguments(args, query)
+            )
+        )
+        entries = _job_entries(search_result)
+        selected = entries if args.limit == 0 else entries[: args.limit]
+
+        if profile is None:
+            profile = _structured_result(
+                await client.call_tool(
+                    "get_my_profile",
+                    {
+                        "sections": args.profile_sections,
+                        "max_scrolls": args.profile_scrolls,
+                    },
+                )
+            )
+
+        details: list[dict[str, Any]] = []
+        for entry in selected:
+            try:
+                details.append(
+                    _structured_result(
+                        await client.call_tool(
+                            "get_job_details", {"job_id": entry["id"]}
+                        )
+                    )
+                )
+            except DirectCommandError as exc:
+                details.append(
+                    {
+                        "url": entry["url"],
+                        "sections": {},
+                        "section_errors": {
+                            "analysis": {"error_message": str(exc)}
+                        },
+                    }
+                )
+    return search_result, profile, details
+
+
 async def _execute(args: argparse.Namespace) -> int:
     tool_timeout = args.tool_timeout or 180.0
     if args.command == "search":
@@ -462,6 +598,33 @@ async def _execute(args: argparse.Namespace) -> int:
                     limit=args.limit,
                 )
             )
+        return 0
+
+    if args.command == "analyze":
+        from linkedin_mcp_server.job_analysis import (
+            analyze_job_fit,
+            format_fit_report,
+        )
+
+        query = args.query or input("Search LinkedIn jobs to analyze: ").strip()
+        if not query:
+            raise DirectCommandError("A search query is required.")
+        search_result, profile, details = await _collect_analysis(
+            args,
+            query,
+            tool_timeout=tool_timeout,
+        )
+        report = analyze_job_fit(
+            query=query,
+            search_result=search_result,
+            profile=profile,
+            job_details=details,
+            limit=args.limit,
+        )
+        if args.json:
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        else:
+            print(format_fit_report(report))
         return 0
 
     if args.command == "job":
@@ -522,6 +685,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--pages must be between 1 and 10")
     if getattr(args, "limit", None) is not None and args.limit < 0:
         parser.error("--limit must be zero or greater")
+    if (
+        getattr(args, "profile_scrolls", None) is not None
+        and not 1 <= args.profile_scrolls <= 50
+    ):
+        parser.error("--profile-scrolls must be between 1 and 50")
 
     try:
         config = _configure(args)

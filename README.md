@@ -84,6 +84,40 @@ linkedin-jobs-mcp job 4252026496
 linkedin-jobs-mcp job 4252026496 --apply
 ```
 
+Analyze the returned jobs against your profile:
+
+```bash
+linkedin-jobs-mcp analyze "data engineer" \
+  --location Berlin \
+  --remote \
+  --this-week \
+  --limit 5
+```
+
+The analysis reads your LinkedIn `experience` and `skills` sections, reads the
+details of the selected postings, and prints:
+
+- an overview with strong, good, review-worthy and stretch matches;
+- repeated strengths and recurring skill gaps;
+- a ranked fit score for each job with matched and missing evidence;
+- observed seniority, work mode, employment type and requested experience;
+- key requirements, responsibilities and a description snapshot.
+
+The score is an explainable keyword/evidence heuristic, not a hiring
+probability. To analyze a resume or profile text instead of the LinkedIn
+profile:
+
+```bash
+linkedin-jobs-mcp analyze "platform engineer" \
+  --profile-file ~/resume.txt \
+  --remote \
+  --limit 5
+```
+
+Use `--json` for the complete structured analysis. If you do not want to read
+the default `experience,skills` sections, adjust them with
+`--profile-sections`.
+
 List jobs in your tracker:
 
 ```bash

@@ -4,7 +4,7 @@
 import sys
 
 
-_DIRECT_COMMANDS = frozenset({"search", "job", "saved", "login"})
+_DIRECT_COMMANDS = frozenset({"search", "analyze", "job", "saved", "login"})
 
 
 def main() -> None:

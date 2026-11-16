@@ -14,7 +14,10 @@ substantive changes are:
   the job-only server and no longer load the upstream optional remote catalog.
 - `linkedin_mcp_server/direct_cli.py`: adds `login`, `search`, `job` and
   `saved` terminal commands so the same job tools can be used without an MCP
-  client.
+  client, plus an `analyze` command that compares postings with the user's
+  LinkedIn profile or a supplied resume text file.
+- `linkedin_mcp_server/job_analysis.py`: implements explainable skill,
+  seniority, responsibility and requirement matching with visible evidence.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.
