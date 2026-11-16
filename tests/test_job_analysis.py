@@ -96,6 +96,9 @@ def test_fit_report_ranks_by_observable_profile_evidence():
     assert first["years_required"] == 5
     assert first["requirements"]
     assert first["responsibilities"]
+    assert "Build reliable pipelines with Python" in first["full_description"]
+    assert first["fit_summary_i18n"]["zh"]
+    assert first["fit_summary_i18n"]["de"]
 
 
 def test_overview_aggregates_strengths_and_gaps():
@@ -128,13 +131,80 @@ def test_html_report_compares_overview_and_details_and_escapes_content():
     )
     report["jobs"][0]["title"] = "<script>alert('x')</script>"
 
-    rendered = render_fit_report_html(report, generated_at="2026-11-16 12:00 CET")
+    rendered = render_fit_report_html(
+        report,
+        generated_at="2026-11-16 12:00 CET",
+        initial_language="zh",
+    )
 
     assert "<!doctype html>" in rendered
+    assert '<html lang="zh">' in rendered
+    assert 'translate("zh");' in rendered
     assert "Job comparison" in rendered
     assert "Detailed assessment" in rendered
     assert "Matched profile evidence" in rendered
     assert "Skills not found in profile" in rendered
+    assert 'data-language="zh"' in rendered
+    assert 'data-language="de"' in rendered
+    assert "中文" in rendered
+    assert "Deutsch" in rendered
+    assert "完整职位描述" in rendered
+    assert "Vollständige Stellenbeschreibung" in rendered
+    assert "Full job description" in rendered
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in rendered
     assert "<script>alert" not in rendered
     assert 'aria-label="Fit score 89 out of 100"' in rendered
+
+
+def test_german_job_sections_are_extracted_with_details_and_benefits():
+    search = {
+        "url": "https://www.linkedin.com/jobs/search/",
+        "job_ids": ["303"],
+        "references": {
+            "search_results": [
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/303/",
+                    "text": "Senior Data Engineer",
+                }
+            ]
+        },
+    }
+    profile = {
+        "sections": {
+            "experience": "Senior Data Engineer",
+            "skills": "Python\nSQL\nDatenanalyse",
+        }
+    }
+    details = [
+        {
+            "sections": {
+                "job_posting": """Senior Data Engineer
+Acme · Berlin · Hybrid
+Über uns
+Wir bauen eine Datenplattform.
+Aufgaben
+- Entwickle zuverlässige Datenpipelines mit Python und SQL.
+- Verantworte Datenmodelle und Datenqualität.
+Anforderungen
+- Mehrjährige Erfahrung mit Python und SQL.
+- Erfahrung mit Datenanalyse und Kubernetes.
+Wir bieten
+- Flexible Arbeitszeiten und Weiterbildung.
+"""
+            }
+        }
+    ]
+
+    report = analyze_job_fit(
+        query="data engineer",
+        search_result=search,
+        profile=profile,
+        job_details=details,
+    )
+    job = report["jobs"][0]
+
+    assert "Entwickle zuverlässige Datenpipelines" in job["responsibilities"][0]
+    assert "Mehrjährige Erfahrung" in job["requirements"][0]
+    assert job["benefits"] == ["Flexible Arbeitszeiten und Weiterbildung."]
+    assert "Kubernetes" in job["missing_skills"]

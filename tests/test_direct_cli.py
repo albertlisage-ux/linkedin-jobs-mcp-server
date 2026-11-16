@@ -307,7 +307,7 @@ def test_no_open_keeps_html_generation_without_launching_browser(
     monkeypatch.setattr(
         direct_cli,
         "_write_html_report",
-        lambda path, report: report_path,
+        lambda path, report, *, language="en": report_path,
     )
     monkeypatch.setattr(
         direct_cli,

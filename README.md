@@ -93,6 +93,7 @@ linkedin-jobs-mcp search "data engineer" \
   --this-week \
   --limit 5 \
   --analyze \
+  --language zh \
   --html linkedin-jobs-report.html
 
 linkedin-jobs-mcp analyze "data engineer" \
@@ -109,7 +110,8 @@ details of the selected postings, and prints:
 - repeated strengths and recurring skill gaps;
 - a ranked fit score for each job with matched and missing evidence;
 - observed seniority, work mode, employment type and requested experience;
-- key requirements, responsibilities and a description snapshot.
+- key requirements, responsibilities, benefits and a description snapshot;
+- expandable full job descriptions, preserving the language supplied by LinkedIn.
 
 `search --analyze --html` writes a standalone responsive report containing the
 overview, ranking table and detailed comparison cards. The report opens in
@@ -119,6 +121,11 @@ browser. `--html` also implies analysis, so
 writes `linkedin-jobs-report.html` in the current directory. The report includes
 print styles, semantic headings, accessible score labels, light/dark color
 support and no external JavaScript.
+
+The report has English, Simplified Chinese and German interface controls.
+Use `--language en`, `--language zh` or `--language de` to choose the
+initial language. The report can switch between all three after opening.
+LinkedIn job descriptions and requirements remain in their original language.
 
 The score is an explainable keyword/evidence heuristic, not a hiring
 probability. To analyze a resume or profile text instead of the LinkedIn

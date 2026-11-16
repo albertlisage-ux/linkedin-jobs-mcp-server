@@ -18,7 +18,8 @@ substantive changes are:
   LinkedIn profile or a supplied resume text file.
 - `linkedin_mcp_server/job_analysis.py`: implements explainable skill,
   seniority, responsibility and requirement matching with visible evidence,
-  plus a standalone responsive HTML comparison report.
+  plus a standalone responsive HTML comparison report with English, Chinese
+  and German interface translations and full posting details.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.

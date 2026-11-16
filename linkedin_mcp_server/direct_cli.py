@@ -218,6 +218,12 @@ def _add_profile_analysis_options(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--language",
+        choices=("en", "zh", "de"),
+        default="en",
+        help="Initial HTML report language: English, Chinese or German.",
+    )
+    parser.add_argument(
         "--no-open",
         action="store_true",
         help="Write the HTML report without opening it in a browser.",
@@ -547,13 +553,18 @@ def _profile_document(path: str) -> dict[str, Any]:
     }
 
 
-def _write_html_report(path: str, report: dict[str, Any]) -> Path:
+def _write_html_report(
+    path: str,
+    report: dict[str, Any],
+    *,
+    language: str = "en",
+) -> Path:
     from linkedin_mcp_server.job_analysis import render_fit_report_html
 
     report_path = Path(path).expanduser()
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
-        render_fit_report_html(report),
+        render_fit_report_html(report, initial_language=language),
         encoding="utf-8",
     )
     return report_path.resolve()
@@ -626,7 +637,11 @@ def _write_and_open_report(
 ) -> None:
     if not args.html:
         return
-    report_path = _write_html_report(args.html, report)
+    report_path = _write_html_report(
+        args.html,
+        report,
+        language=getattr(args, "language", "en"),
+    )
     stream = sys.stderr if args.json else sys.stdout
     print(f"HTML report: {report_path}", file=stream)
     if args.no_open:

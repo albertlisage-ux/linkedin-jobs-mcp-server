@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import html
+import json
 from collections import Counter
 from datetime import datetime
 from typing import Any
@@ -23,7 +24,12 @@ _SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "Azure": ("azure",),
     "Bash": ("bash", "shell scripting"),
     "BigQuery": ("bigquery", "big query"),
-    "Business Analysis": ("business analysis", "business analyst"),
+    "Business Analysis": (
+        "business analysis",
+        "business analyst",
+        "geschäftsanalyse",
+        "业务分析",
+    ),
     "C#": ("c#", "c sharp"),
     "C++": ("c++",),
     "CI/CD": ("ci/cd", "continuous integration", "continuous delivery"),
@@ -32,7 +38,12 @@ _SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "CSS": ("css",),
     "Customer Success": ("customer success",),
     "Dart": ("dart",),
-    "Data Analysis": ("data analysis", "data analytics"),
+    "Data Analysis": (
+        "data analysis",
+        "data analytics",
+        "datenanalyse",
+        "数据分析",
+    ),
     "Databricks": ("databricks",),
     "dbt": ("dbt", "data build tool"),
     "Deep Learning": ("deep learning",),
@@ -62,7 +73,12 @@ _SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "LangChain": ("langchain",),
     "Linux": ("linux",),
     "LLM": ("llm", "large language model", "large language models"),
-    "Machine Learning": ("machine learning", "ml engineering"),
+    "Machine Learning": (
+        "machine learning",
+        "ml engineering",
+        "maschinelles lernen",
+        "机器学习",
+    ),
     "Marketing": ("marketing", "digital marketing"),
     "MongoDB": ("mongodb", "mongo db"),
     "MLOps": ("mlops", "ml ops"),
@@ -77,8 +93,18 @@ _SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "Pandas": ("pandas",),
     "PostgreSQL": ("postgresql", "postgres"),
     "Power BI": ("power bi", "powerbi"),
-    "Product Management": ("product management", "product manager"),
-    "Project Management": ("project management", "project manager"),
+    "Product Management": (
+        "product management",
+        "product manager",
+        "produktmanagement",
+        "产品管理",
+    ),
+    "Project Management": (
+        "project management",
+        "project manager",
+        "projektmanagement",
+        "项目管理",
+    ),
     "Prometheus": ("prometheus",),
     "Prototyping": ("prototyping",),
     "PyTorch": ("pytorch",),
@@ -102,6 +128,8 @@ _SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "Stakeholder Management": (
         "stakeholder management",
         "stakeholder engagement",
+        "stakeholder-management",
+        "利益相关者管理",
     ),
     "Swift": ("swift",),
     "Tableau": ("tableau",),
@@ -174,6 +202,17 @@ _RESPONSIBILITY_HEADINGS = {
     "what you will do",
     "what you’ll do",
     "your role",
+    "aufgaben",
+    "deine aufgaben",
+    "deine rolle",
+    "ihre aufgaben",
+    "ihre rolle",
+    "was du machst",
+    "was sie tun",
+    "主要职责",
+    "职位职责",
+    "岗位职责",
+    "工作职责",
 }
 
 _REQUIREMENT_HEADINGS = {
@@ -186,6 +225,39 @@ _REQUIREMENT_HEADINGS = {
     "what you’ll need",
     "who you are",
     "you have",
+    "anforderungen",
+    "das bringen sie mit",
+    "das bringst du mit",
+    "dein profil",
+    "ihr profil",
+    "qualifikationen",
+    "voraussetzungen",
+    "was du mitbringst",
+    "was sie mitbringen",
+    "任职要求",
+    "岗位要求",
+    "资格要求",
+    "职位要求",
+    "我们希望你",
+}
+
+_BENEFIT_HEADINGS = {
+    "benefits",
+    "perks",
+    "what we offer",
+    "what we can offer you",
+    "what you'll get",
+    "what you’ll get",
+    "why join us",
+    "benefits",
+    "darauf kannst du dich freuen",
+    "leistungen",
+    "unser angebot",
+    "was wir bieten",
+    "wir bieten",
+    "福利待遇",
+    "我们提供",
+    "职位福利",
 }
 
 _KNOWN_HEADINGS = {
@@ -208,6 +280,46 @@ _KNOWN_HEADINGS = {
     "you have",
     "qualifications",
     "requirements",
+    "benefits",
+    "perks",
+    "what we offer",
+    "what we can offer you",
+    "what you'll get",
+    "what you’ll get",
+    "why join us",
+    "aufgaben",
+    "deine aufgaben",
+    "deine rolle",
+    "ihre aufgaben",
+    "ihre rolle",
+    "was du machst",
+    "was sie tun",
+    "anforderungen",
+    "das bringen sie mit",
+    "das bringst du mit",
+    "dein profil",
+    "ihr profil",
+    "qualifikationen",
+    "voraussetzungen",
+    "was du mitbringst",
+    "was sie mitbringen",
+    "darauf kannst du dich freuen",
+    "leistungen",
+    "unser angebot",
+    "was wir bieten",
+    "wir bieten",
+    "主要职责",
+    "职位职责",
+    "岗位职责",
+    "工作职责",
+    "任职要求",
+    "岗位要求",
+    "资格要求",
+    "职位要求",
+    "我们希望你",
+    "福利待遇",
+    "我们提供",
+    "职位福利",
 }
 
 
@@ -423,6 +535,14 @@ def _description_excerpt(job_text: str, limit: int = 500) -> str:
     return f"{cut}..."
 
 
+def _full_description(job_text: str, limit: int = 30_000) -> str:
+    """Return the cleaned captured posting, bounded only to avoid pathological pages."""
+    text = "\n".join(_clean_lines(job_text))
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0] + "..."
+
+
 def _years_required(text: str) -> int | None:
     matches = [
         int(value)
@@ -443,6 +563,28 @@ def _rating(score: int) -> tuple[str, str]:
     if score >= 40:
         return "possible_match", "Worth reviewing"
     return "stretch", "Stretch"
+
+
+def _fit_summary_i18n(
+    matched: int,
+    total: int,
+    missing: int,
+) -> dict[str, str]:
+    return {
+        "en": (
+            f"Matched {matched} of {total} detected skills. "
+            f"Review {missing} gap{'s' if missing != 1 else ''} before applying."
+        ),
+        "zh": (
+            f"已匹配检测到的 {total} 项技能中的 {matched} 项。"
+            f"申请前请核对 {missing} 项差距。"
+        ),
+        "de": (
+            f"{matched} von {total} erkannten Kompetenzen stimmen überein. "
+            f"Vor der Bewerbung {missing} Lücke"
+            f"{'n' if missing != 1 else ''} prüfen."
+        ),
+    }
 
 
 def _analyze_one_job(
@@ -517,10 +659,21 @@ def _analyze_one_job(
         "employment_type": _employment_type(job_text[:2000]),
         "years_required": _years_required(job_text),
         "responsibilities": _section_items(
-            job_text, _RESPONSIBILITY_HEADINGS
+            job_text, _RESPONSIBILITY_HEADINGS, limit=20
         ),
-        "requirements": _section_items(job_text, _REQUIREMENT_HEADINGS),
+        "requirements": _section_items(
+            job_text, _REQUIREMENT_HEADINGS, limit=20
+        ),
+        "benefits": _section_items(
+            job_text, _BENEFIT_HEADINGS, limit=20
+        ),
         "description_excerpt": _description_excerpt(job_text),
+        "full_description": _full_description(job_text),
+        "fit_summary_i18n": _fit_summary_i18n(
+            len(matched),
+            len(job_skills),
+            len(missing),
+        ),
         "error": error_message,
     }
 
@@ -678,11 +831,357 @@ def format_fit_report(report: dict[str, Any]) -> str:
         if job["responsibilities"]:
             lines.append("Main responsibilities:")
             lines.extend(f"- {item}" for item in job["responsibilities"])
+        if job.get("benefits"):
+            lines.append("Benefits and offerings:")
+            lines.extend(f"- {item}" for item in job["benefits"])
         if job["description_excerpt"]:
             lines.append(f'Posting snapshot: {job["description_excerpt"]}')
         if job.get("error"):
             lines.append(f'Posting warning: {job["error"]}')
     return "\n".join(lines)
+
+
+_REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
+    "en": {
+        "app.kicker": "LinkedIn job comparison",
+        "app.title_template": "Fit report for “{query}”",
+        "app.skip": "Skip to report",
+        "app.generated": "Generated",
+        "app.profile": "Profile",
+        "app.jobs_analysed": "jobs analysed",
+        "language.label": "Report language",
+        "overview.title": "Overview",
+        "overview.strong": "Strong matches",
+        "overview.good": "Good matches",
+        "overview.review": "Worth reviewing",
+        "overview.stretch": "Stretch roles",
+        "overview.methodology_title": "How this score works",
+        "overview.methodology": (
+            "The score compares skill evidence, role/title overlap and "
+            "observed seniority signals. It is not a hiring probability."
+        ),
+        "overview.strengths": "Repeated strengths",
+        "overview.gaps": "Repeated gaps",
+        "overview.no_strengths": "No repeated skill matches",
+        "overview.no_gaps": "No repeated skill gaps",
+        "comparison.title": "Job comparison",
+        "comparison.caption": "Ranked from strongest to weakest evidence match.",
+        "table.job": "Job",
+        "table.company": "Company",
+        "table.location": "Location",
+        "table.score": "Score",
+        "table.assessment": "Assessment",
+        "table.matched": "Matched evidence",
+        "score.of": "/100",
+        "details.title": "Detailed comparison",
+        "details.assessment": "Detailed assessment",
+        "details.open": "Open LinkedIn posting",
+        "details.confidence": "confidence",
+        "details.score_aria": "Fit score {score} out of 100",
+        "details.matched": "Matched profile evidence",
+        "details.missing": "Skills not found in profile",
+        "details.none": "None detected.",
+        "details.role_signals": "Role signals",
+        "details.work_mode": "Work mode",
+        "details.employment": "Employment type",
+        "details.posting_seniority": "Posting seniority",
+        "details.profile_seniority": "Profile seniority",
+        "details.years_requested": "Years requested",
+        "details.requirements": "Key requirements",
+        "details.requirements_empty": "Requirements were not isolated from this posting.",
+        "details.responsibilities": "Main responsibilities",
+        "details.responsibilities_empty": (
+            "Responsibilities were not isolated from this posting."
+        ),
+        "details.benefits": "Benefits and offerings",
+        "details.benefits_empty": "Benefits were not isolated from this posting.",
+        "details.snapshot": "Posting snapshot",
+        "details.full_description": "Full job description",
+        "details.no_description": "No description snapshot was captured.",
+        "details.warning": "Posting warning",
+        "details.view_full": "View full LinkedIn posting",
+        "details.no_postings": "No job postings were returned.",
+        "common.not_captured": "Not captured",
+        "common.not_specified": "Not specified",
+        "common.no_direct_matches": "No direct matches",
+        "common.jobs_count": "{count} jobs",
+        "methodology.title": "How to read this report",
+        "methodology.body": (
+            "A high score means more of the captured posting language overlaps "
+            "the profile evidence and the role/title signals align. A missing "
+            "skill means it was not found in the captured profile sections; it "
+            "does not prove the skill is absent from your experience."
+        ),
+        "footer.disclaimer": (
+            "Generated locally by LinkedIn Jobs MCP Server. LinkedIn is a "
+            "trademark of LinkedIn Corporation. This independent report is not "
+            "affiliated with LinkedIn."
+        ),
+        "footer.language_note": (
+            "Interface and analytical labels are translated. Job descriptions "
+            "and requirements remain in the language provided by LinkedIn."
+        ),
+        "rating.strong_match": "Strong match",
+        "rating.good_match": "Good match",
+        "rating.possible_match": "Worth reviewing",
+        "rating.stretch": "Stretch",
+        "confidence.high": "high",
+        "confidence.medium": "medium",
+        "confidence.low": "low",
+        "work.hybrid": "Hybrid",
+        "work.remote": "Remote",
+        "work.on_site": "On-site",
+        "work.unspecified": "Not clear",
+        "employment.full_time": "Full-time",
+        "employment.part_time": "Part-time",
+        "employment.contract": "Contract",
+        "employment.temporary": "Temporary",
+        "employment.internship": "Internship",
+        "employment.unspecified": "Not clear",
+        "level.unspecified": "Not specified",
+        "level.internship": "Internship",
+        "level.entry": "Entry level",
+        "level.junior": "Junior",
+        "level.mid": "Mid-level",
+        "level.senior": "Senior",
+        "level.staff": "Staff",
+        "level.lead": "Lead",
+        "level.principal": "Principal",
+        "level.manager": "Manager",
+        "level.director": "Director",
+        "level.head": "Head",
+        "level.executive": "Executive",
+        "level.vice president": "Vice President",
+        "level.vp": "VP",
+    },
+    "zh": {
+        "app.kicker": "LinkedIn 职位对比",
+        "app.title_template": "“{query}”职位匹配报告",
+        "app.skip": "跳到报告",
+        "app.generated": "生成时间",
+        "app.profile": "档案",
+        "app.jobs_analysed": "个职位已分析",
+        "language.label": "报告语言",
+        "overview.title": "概览",
+        "overview.strong": "高度匹配",
+        "overview.good": "匹配良好",
+        "overview.review": "值得进一步查看",
+        "overview.stretch": "挑战职位",
+        "overview.methodology_title": "评分依据",
+        "overview.methodology": (
+            "评分综合比较技能证据、职位/标题重合度以及识别到的资历信号。"
+            "该分数不是录用概率。"
+        ),
+        "overview.strengths": "重复出现的优势",
+        "overview.gaps": "重复出现的差距",
+        "overview.no_strengths": "没有重复匹配的技能",
+        "overview.no_gaps": "没有重复出现的技能差距",
+        "comparison.title": "职位对比",
+        "comparison.caption": "按证据匹配度从高到低排序。",
+        "table.job": "职位",
+        "table.company": "公司",
+        "table.location": "地点",
+        "table.score": "评分",
+        "table.assessment": "评估",
+        "table.matched": "匹配证据",
+        "score.of": "/100",
+        "details.title": "详细对比",
+        "details.assessment": "详细评估",
+        "details.open": "打开 LinkedIn 职位",
+        "details.confidence": "置信度",
+        "details.score_aria": "匹配评分 {score} 分，满分 100 分",
+        "details.matched": "已匹配的档案证据",
+        "details.missing": "档案中未发现的技能",
+        "details.none": "未检测到。",
+        "details.role_signals": "职位信号",
+        "details.work_mode": "工作模式",
+        "details.employment": "雇佣类型",
+        "details.posting_seniority": "职位资历",
+        "details.profile_seniority": "档案资历",
+        "details.years_requested": "经验年限要求",
+        "details.requirements": "主要要求",
+        "details.requirements_empty": "未能从该职位中单独提取要求。",
+        "details.responsibilities": "主要职责",
+        "details.responsibilities_empty": "未能从该职位中单独提取职责。",
+        "details.benefits": "福利与待遇",
+        "details.benefits_empty": "未能从该职位中单独提取福利信息。",
+        "details.snapshot": "职位摘要",
+        "details.full_description": "完整职位描述",
+        "details.no_description": "未捕获职位描述摘要。",
+        "details.warning": "职位警告",
+        "details.view_full": "查看完整 LinkedIn 职位",
+        "details.no_postings": "没有返回职位。",
+        "common.not_captured": "未捕获",
+        "common.not_specified": "未注明",
+        "common.no_direct_matches": "没有直接匹配",
+        "common.jobs_count": "{count} 个职位",
+        "methodology.title": "如何阅读此报告",
+        "methodology.body": (
+            "高分表示职位描述中的更多语言与档案证据重合，并且职位/标题信号一致。"
+            "“档案中未发现”只表示在本次读取的档案内容中没有找到，并不证明你完全没有该技能。"
+        ),
+        "footer.disclaimer": (
+            "本报告由 LinkedIn Jobs MCP Server 在本地生成。LinkedIn 是 "
+            "LinkedIn Corporation 的商标。本独立报告与 LinkedIn 无隶属关系。"
+        ),
+        "footer.language_note": (
+            "界面和分析标签已翻译。职位描述与要求保留 LinkedIn 提供的原始语言。"
+        ),
+        "rating.strong_match": "高度匹配",
+        "rating.good_match": "匹配良好",
+        "rating.possible_match": "值得查看",
+        "rating.stretch": "挑战",
+        "confidence.high": "高",
+        "confidence.medium": "中",
+        "confidence.low": "低",
+        "work.hybrid": "混合办公",
+        "work.remote": "远程",
+        "work.on_site": "现场办公",
+        "work.unspecified": "不明确",
+        "employment.full_time": "全职",
+        "employment.part_time": "兼职",
+        "employment.contract": "合同制",
+        "employment.temporary": "临时",
+        "employment.internship": "实习",
+        "employment.unspecified": "不明确",
+        "level.unspecified": "未注明",
+        "level.internship": "实习",
+        "level.entry": "入门级",
+        "level.junior": "初级",
+        "level.mid": "中级",
+        "level.senior": "高级",
+        "level.staff": "资深专家",
+        "level.lead": "负责人",
+        "level.principal": "首席专家",
+        "level.manager": "经理",
+        "level.director": "总监",
+        "level.head": "部门负责人",
+        "level.executive": "高管",
+        "level.vice president": "副总裁",
+        "level.vp": "副总裁",
+    },
+    "de": {
+        "app.kicker": "LinkedIn-Stellenvergleich",
+        "app.title_template": "Passungsbericht für „{query}“",
+        "app.skip": "Zum Bericht springen",
+        "app.generated": "Erstellt",
+        "app.profile": "Profil",
+        "app.jobs_analysed": "Stellen analysiert",
+        "language.label": "Berichtssprache",
+        "overview.title": "Überblick",
+        "overview.strong": "Starke Treffer",
+        "overview.good": "Gute Treffer",
+        "overview.review": "Prüfenswert",
+        "overview.stretch": "Ambitionierte Rollen",
+        "overview.methodology_title": "So funktioniert die Bewertung",
+        "overview.methodology": (
+            "Die Bewertung vergleicht Kompetenznachweise, Überschneidungen bei "
+            "Rolle und Titel sowie erkannte Senioritätssignale. Sie ist keine "
+            "Einstellungswahrscheinlichkeit."
+        ),
+        "overview.strengths": "Wiederkehrende Stärken",
+        "overview.gaps": "Wiederkehrende Lücken",
+        "overview.no_strengths": "Keine wiederkehrenden Kompetenztreffer",
+        "overview.no_gaps": "Keine wiederkehrenden Kompetenzlücken",
+        "comparison.title": "Stellenvergleich",
+        "comparison.caption": (
+            "Sortiert von der stärksten zur schwächsten Evidenzübereinstimmung."
+        ),
+        "table.job": "Stelle",
+        "table.company": "Unternehmen",
+        "table.location": "Ort",
+        "table.score": "Bewertung",
+        "table.assessment": "Einschätzung",
+        "table.matched": "Übereinstimmende Evidenz",
+        "score.of": "/100",
+        "details.title": "Detailvergleich",
+        "details.assessment": "Detailbewertung",
+        "details.open": "LinkedIn-Stelle öffnen",
+        "details.confidence": "Sicherheit",
+        "details.score_aria": "Passungsbewertung {score} von 100",
+        "details.matched": "Übereinstimmende Profilnachweise",
+        "details.missing": "Nicht im Profil gefundene Kompetenzen",
+        "details.none": "Keine erkannt.",
+        "details.role_signals": "Rollensignale",
+        "details.work_mode": "Arbeitsmodell",
+        "details.employment": "Beschäftigungsart",
+        "details.posting_seniority": "Seniorität der Stelle",
+        "details.profile_seniority": "Seniorität im Profil",
+        "details.years_requested": "Geforderte Berufserfahrung",
+        "details.requirements": "Wichtige Anforderungen",
+        "details.requirements_empty": (
+            "Anforderungen konnten aus dieser Stelle nicht separat extrahiert werden."
+        ),
+        "details.responsibilities": "Hauptaufgaben",
+        "details.responsibilities_empty": (
+            "Aufgaben konnten aus dieser Stelle nicht separat extrahiert werden."
+        ),
+        "details.benefits": "Leistungen und Angebote",
+        "details.benefits_empty": (
+            "Leistungen konnten aus dieser Stelle nicht separat extrahiert werden."
+        ),
+        "details.snapshot": "Stellenauszug",
+        "details.full_description": "Vollständige Stellenbeschreibung",
+        "details.no_description": "Kein Beschreibungsauszug erfasst.",
+        "details.warning": "Hinweis zur Stelle",
+        "details.view_full": "Vollständige LinkedIn-Stelle anzeigen",
+        "details.no_postings": "Es wurden keine Stellen zurückgegeben.",
+        "common.not_captured": "Nicht erfasst",
+        "common.not_specified": "Nicht angegeben",
+        "common.no_direct_matches": "Keine direkten Treffer",
+        "common.jobs_count": "{count} Stellen",
+        "methodology.title": "So liest du den Bericht",
+        "methodology.body": (
+            "Eine hohe Bewertung bedeutet, dass mehr Sprache aus der "
+            "Stellenanzeige mit Profilnachweisen übereinstimmt und die "
+            "Rollen-/Titelsignale passen. „Nicht im Profil gefunden“ bedeutet "
+            "nur, dass die Kompetenz in den gelesenen Profilabschnitten nicht "
+            "vorkam; sie kann dennoch vorhanden sein."
+        ),
+        "footer.disclaimer": (
+            "Lokal erstellt mit LinkedIn Jobs MCP Server. LinkedIn ist eine "
+            "Marke der LinkedIn Corporation. Dieser unabhängige Bericht steht "
+            "in keiner Verbindung zu LinkedIn."
+        ),
+        "footer.language_note": (
+            "Oberfläche und Analysebezeichnungen sind übersetzt. "
+            "Stellenbeschreibungen und Anforderungen bleiben in der von "
+            "LinkedIn gelieferten Sprache."
+        ),
+        "rating.strong_match": "Starker Treffer",
+        "rating.good_match": "Guter Treffer",
+        "rating.possible_match": "Prüfenswert",
+        "rating.stretch": "Ambitioniert",
+        "confidence.high": "hoch",
+        "confidence.medium": "mittel",
+        "confidence.low": "niedrig",
+        "work.hybrid": "Hybrid",
+        "work.remote": "Remote",
+        "work.on_site": "Vor Ort",
+        "work.unspecified": "Nicht eindeutig",
+        "employment.full_time": "Vollzeit",
+        "employment.part_time": "Teilzeit",
+        "employment.contract": "Vertrag",
+        "employment.temporary": "Befristet",
+        "employment.internship": "Praktikum",
+        "employment.unspecified": "Nicht eindeutig",
+        "level.unspecified": "Nicht angegeben",
+        "level.internship": "Praktikum",
+        "level.entry": "Einstieg",
+        "level.junior": "Junior",
+        "level.mid": "Mittlere Ebene",
+        "level.senior": "Senior",
+        "level.staff": "Staff",
+        "level.lead": "Lead",
+        "level.principal": "Principal",
+        "level.manager": "Management",
+        "level.director": "Direktion",
+        "level.head": "Bereichsleitung",
+        "level.executive": "Geschäftsleitung",
+        "level.vice president": "Vice President",
+        "level.vp": "VP",
+    },
+}
 
 
 _REPORT_CSS = r"""
@@ -803,6 +1302,39 @@ h4 { margin: 24px 0 8px; font-size: 0.95rem; }
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
+  color: var(--muted-foreground);
+}
+.language-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 0;
+}
+.language-switcher button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: pointer;
+  font: 600 0.9rem/1.2 "Fira Sans", "Avenir Next", "Segoe UI", sans-serif;
+}
+.language-switcher button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  transition: border-color 180ms ease-out, color 180ms ease-out;
+}
+.language-switcher button[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--surface);
+}
+.fit-summary {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-raised);
   color: var(--muted-foreground);
 }
 .section { margin-top: 48px; }
@@ -952,6 +1484,25 @@ th {
   background: var(--surface-raised);
   color: var(--muted-foreground);
 }
+.full-description {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.full-description summary {
+  min-height: 48px;
+  padding: 13px 16px;
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 600;
+}
+.full-description > div {
+  max-height: 36rem;
+  overflow: auto;
+  padding: 0 16px 16px;
+  white-space: pre-line;
+}
 .warning {
   padding: 12px 14px;
   border-radius: 12px;
@@ -965,6 +1516,10 @@ th {
   color: var(--muted-foreground);
 }
 footer { margin-top: 48px; color: var(--muted-foreground); font-size: 0.9rem; }
+html:lang(zh-CN) body,
+html:lang(zh-CN) .language-switcher button {
+  font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
 .button {
   display: inline-flex;
   align-items: center;
@@ -1034,18 +1589,42 @@ def _safe_href(value: Any) -> str:
     return "#"
 
 
+def _i18n_text(key: str) -> str:
+    return _REPORT_TRANSLATIONS["en"].get(key, key)
+
+
+def _i18n_span(key: str) -> str:
+    return (
+        f'<span data-i18n="{_e(key)}">'
+        f"{_e(_i18n_text(key))}</span>"
+    )
+
+
+def _translated_value(prefix: str, value: str) -> str:
+    key = f"{prefix}.{value}"
+    return (
+        f'<span data-i18n="{_e(key)}">'
+        f"{_e(_i18n_text(key) if key in _REPORT_TRANSLATIONS['en'] else value)}"
+        "</span>"
+    )
+
+
+def _value_or_i18n(value: Any, key: str) -> str:
+    return _e(value) if value else _i18n_span(key)
+
+
 def _chip_list(items: list[str], *, missing: bool = False) -> str:
     if not items:
-        return '<p class="snapshot">None detected.</p>'
+        return f'<p class="snapshot">{_i18n_span("details.none")}</p>'
     css = "chip missing" if missing else "chip"
     return '<div class="chips">' + "".join(
         f'<span class="{css}">{_e(item)}</span>' for item in items
     ) + "</div>"
 
 
-def _list_html(items: list[str], empty: str) -> str:
+def _list_html(items: list[str], empty_key: str) -> str:
     if not items:
-        return f'<p class="snapshot">{_e(empty)}</p>'
+        return f'<p class="snapshot">{_i18n_span(empty_key)}</p>'
     return "<ul>" + "".join(f"<li>{_e(item)}</li>" for item in items) + "</ul>"
 
 
@@ -1053,6 +1632,7 @@ def render_fit_report_html(
     report: dict[str, Any],
     *,
     generated_at: str | None = None,
+    initial_language: str = "en",
 ) -> str:
     """Render a standalone, responsive comparison report."""
     generated_at = generated_at or datetime.now().astimezone().strftime(
@@ -1066,12 +1646,24 @@ def render_fit_report_html(
     summary_rows = "".join(
         f"""
         <tr>
-          <td data-label="Job"><a href="#job-{_e(job['job_id'])}">{_e(job['title'])}</a></td>
-          <td data-label="Company">{_e(job.get('company') or 'Not captured')}</td>
-          <td data-label="Location">{_e(job.get('location') or 'Not specified')}</td>
-          <td data-label="Score"><span class="score">{_e(job['fit_score'])}<small>/100</small></span></td>
-          <td data-label="Assessment"><span class="badge {_e(job['fit_rating_key'])}">{_e(job['fit_rating'])}</span></td>
-          <td data-label="Matched">{_e(', '.join(job['matched_skills'][:5]) or 'No direct matches')}</td>
+          <td data-label="{_e(_i18n_text('table.job'))}" data-i18n-label="table.job">
+            <a href="#job-{_e(job['job_id'])}">{_e(job['title'])}</a>
+          </td>
+          <td data-label="{_e(_i18n_text('table.company'))}" data-i18n-label="table.company">
+            {_value_or_i18n(job.get('company'), 'common.not_captured')}
+          </td>
+          <td data-label="{_e(_i18n_text('table.location'))}" data-i18n-label="table.location">
+            {_value_or_i18n(job.get('location'), 'common.not_specified')}
+          </td>
+          <td data-label="{_e(_i18n_text('table.score'))}" data-i18n-label="table.score">
+            <span class="score">{_e(job['fit_score'])}<small>{_i18n_span('score.of')}</small></span>
+          </td>
+          <td data-label="{_e(_i18n_text('table.assessment'))}" data-i18n-label="table.assessment">
+            <span class="badge {_e(job['fit_rating_key'])}" data-i18n="rating.{_e(job['fit_rating_key'])}">{_e(job['fit_rating'])}</span>
+          </td>
+          <td data-label="{_e(_i18n_text('table.matched'))}" data-i18n-label="table.matched">
+            {_e(', '.join(job['matched_skills'][:5])) if job['matched_skills'] else _i18n_span('common.no_direct_matches')}
+          </td>
         </tr>
         """
         for job in report["jobs"]
@@ -1081,22 +1673,38 @@ def render_fit_report_html(
     for index, job in enumerate(report["jobs"], start=1):
         details = [
             (
-                f'Work mode: {job["work_mode"]}'
-                if job.get("work_mode") != "unspecified"
-                else "Work mode: not clear"
+                f"{_i18n_span('details.work_mode')}: "
+                f"{_translated_value('work', job.get('work_mode', 'unspecified'))}"
             ),
             (
-                f'Employment: {job["employment_type"]}'
-                if job.get("employment_type") != "unspecified"
-                else "Employment type: not clear"
+                f"{_i18n_span('details.employment')}: "
+                f"{_translated_value('employment', job.get('employment_type', 'unspecified'))}"
             ),
-            f'Posting seniority: {job.get("job_level")}',
-            f'Profile seniority: {job.get("profile_level")}',
+            (
+                f"{_i18n_span('details.posting_seniority')}: "
+                f"{_translated_value('level', job.get('job_level', 'unspecified'))}"
+            ),
+            (
+                f"{_i18n_span('details.profile_seniority')}: "
+                f"{_translated_value('level', job.get('profile_level', 'unspecified'))}"
+            ),
         ]
         if job.get("years_required") is not None:
-            details.append(f'{job["years_required"]}+ years requested')
+            details.append(
+                f"{_i18n_span('details.years_requested')}: "
+                f"{_e(job['years_required'])}+"
+            )
+        summary_i18n = job.get("fit_summary_i18n", {})
+        summary = (
+            f'<p class="fit-summary" '
+            f'data-summary-en="{_e(summary_i18n.get("en", ""))}" '
+            f'data-summary-zh="{_e(summary_i18n.get("zh", ""))}" '
+            f'data-summary-de="{_e(summary_i18n.get("de", ""))}">'
+            f'{_e(summary_i18n.get("en", ""))}</p>'
+        )
         warning = (
-            f'<p class="warning"><strong>Posting warning:</strong> '
+            f'<p class="warning"><strong data-i18n="details.warning">'
+            f'{_e(_i18n_text("details.warning"))}:</strong> '
             f'{_e(job["error"])}</p>'
             if job.get("error")
             else ""
@@ -1104,6 +1712,19 @@ def render_fit_report_html(
         snapshot = (
             f'<p class="snapshot">{_e(job["description_excerpt"])}</p>'
             if job.get("description_excerpt")
+            else f'<p class="snapshot">{_i18n_span("details.no_description")}</p>'
+        )
+        full_description = job.get("full_description") or ""
+        full_description_html = (
+            f"""
+            <details class="full-description">
+              <summary data-i18n="details.full_description">
+                {_e(_i18n_text("details.full_description"))}
+              </summary>
+              <div>{_e(full_description)}</div>
+            </details>
+            """
+            if full_description
             else ""
         )
         job_cards.append(
@@ -1111,51 +1732,85 @@ def render_fit_report_html(
             <article class="job-card" id="job-{_e(job['job_id'])}">
               <header class="job-head">
                 <div>
-                  <p class="eyebrow">Detailed assessment {index}</p>
+                  <p class="eyebrow">
+                    <span data-i18n="details.assessment">
+                      {_e(_i18n_text("details.assessment"))}
+                    </span>
+                    {_e(index)}
+                  </p>
                   <h3>{_e(job['title'])}</h3>
                   <div class="job-meta">
-                    <span>{_e(job.get('company') or 'Company not captured')}</span>
-                    <span>{_e(job.get('location') or 'Location not captured')}</span>
-                    <a href="{_safe_href(job['url'])}">Open LinkedIn posting</a>
+                    <span>{_value_or_i18n(job.get('company'), 'common.not_captured')}</span>
+                    <span>{_value_or_i18n(job.get('location'), 'common.not_specified')}</span>
+                    <a href="{_safe_href(job['url'])}" data-i18n="details.open">
+                      {_e(_i18n_text("details.open"))}
+                    </a>
                   </div>
                 </div>
                 <div>
-                  <span class="badge {_e(job['fit_rating_key'])}">{_e(job['fit_rating'])}</span>
-                  <div class="score">{_e(job['fit_score'])}<small>/100</small></div>
-                  <div class="score-track" role="img" aria-label="Fit score {_e(job['fit_score'])} out of 100">
+                  <span class="badge {_e(job['fit_rating_key'])}" data-i18n="rating.{_e(job['fit_rating_key'])}">
+                    {_e(job['fit_rating'])}
+                  </span>
+                  <div class="score">
+                    {_e(job['fit_score'])}<small data-i18n="score.of">{_e(_i18n_text("score.of"))}</small>
+                  </div>
+                  <div
+                    class="score-track"
+                    role="img"
+                    aria-label="{_e(_i18n_text('details.score_aria').format(score=job['fit_score']))}"
+                    data-i18n-aria="details.score_aria"
+                    data-score="{_e(job['fit_score'])}"
+                  >
                     <div class="score-fill" style="--score:{_e(job['fit_score'])}%"></div>
                   </div>
-                  <p class="job-meta">{_e(job['confidence'])} confidence</p>
+                  <p class="job-meta">
+                    <span data-i18n="confidence.{_e(job['confidence'])}">
+                      {_e(_i18n_text(f"confidence.{job['confidence']}"))}
+                    </span>
+                    <span data-i18n="details.confidence">
+                      {_e(_i18n_text("details.confidence"))}
+                    </span>
+                  </p>
                 </div>
               </header>
               <div class="job-body">
                 <section>
-                  <h4>Matched profile evidence</h4>
+                  <h4 data-i18n="details.matched">{_e(_i18n_text("details.matched"))}</h4>
                   {_chip_list(job['matched_skills'])}
                 </section>
                 <section>
-                  <h4>Skills not found in profile</h4>
+                  <h4 data-i18n="details.missing">{_e(_i18n_text("details.missing"))}</h4>
                   {_chip_list(job['missing_skills'], missing=True)}
                 </section>
                 <section class="full">
-                  <h4>Role signals</h4>
+                  <h4 data-i18n="details.role_signals">{_e(_i18n_text("details.role_signals"))}</h4>
+                  {summary}
                   <div class="chips">
-                    {''.join(f'<span class="chip">{_e(item)}</span>' for item in details)}
+                    {''.join(f'<span class="chip">{item}</span>' for item in details)}
                   </div>
                 </section>
                 <section>
-                  <h4>Key requirements</h4>
-                  {_list_html(job['requirements'], 'Requirements were not isolated from this posting.')}
+                  <h4 data-i18n="details.requirements">{_e(_i18n_text("details.requirements"))}</h4>
+                  {_list_html(job['requirements'], 'details.requirements_empty')}
                 </section>
                 <section>
-                  <h4>Main responsibilities</h4>
-                  {_list_html(job['responsibilities'], 'Responsibilities were not isolated from this posting.')}
+                  <h4 data-i18n="details.responsibilities">{_e(_i18n_text("details.responsibilities"))}</h4>
+                  {_list_html(job['responsibilities'], 'details.responsibilities_empty')}
+                </section>
+                <section>
+                  <h4 data-i18n="details.benefits">{_e(_i18n_text("details.benefits"))}</h4>
+                  {_list_html(job.get('benefits', []), 'details.benefits_empty')}
                 </section>
                 <section class="full">
-                  <h4>Posting snapshot</h4>
-                  {snapshot or '<p class="snapshot">No description snapshot was captured.</p>'}
+                  <h4 data-i18n="details.snapshot">{_e(_i18n_text("details.snapshot"))}</h4>
+                  {snapshot}
+                  {full_description_html}
                   {warning}
-                  <p><a class="button" href="{_safe_href(job['url'])}">View full LinkedIn posting</a></p>
+                  <p>
+                    <a class="button" href="{_safe_href(job['url'])}" data-i18n="details.view_full">
+                      {_e(_i18n_text("details.view_full"))}
+                    </a>
+                  </p>
                 </section>
               </div>
             </article>
@@ -1163,11 +1818,19 @@ def render_fit_report_html(
         )
 
     strengths = "".join(
-        f'<span class="chip">{_e(item["skill"])} · {_e(item["jobs"])} jobs</span>'
+        f'<span class="chip">'
+        f'{_e(item["skill"])} · '
+        f'<span data-i18n-template="common.jobs_count" '
+        f'data-count="{_e(item["jobs"])}">{_e(item["jobs"])} jobs</span>'
+        f"</span>"
         for item in report.get("common_strengths", [])
     )
     gaps = "".join(
-        f'<span class="chip missing">{_e(item["skill"])} · {_e(item["jobs"])} jobs</span>'
+        f'<span class="chip missing">'
+        f'{_e(item["skill"])} · '
+        f'<span data-i18n-template="common.jobs_count" '
+        f'data-count="{_e(item["jobs"])}">{_e(item["jobs"])} jobs</span>'
+        f"</span>"
         for item in report.get("common_gaps", [])
     )
     profile_link = (
@@ -1175,63 +1838,79 @@ def render_fit_report_html(
         if profile_url != "#"
         else profile_label
     )
+    translations_json = json.dumps(
+        _REPORT_TRANSLATIONS,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).replace("</", "<\\/")
+    initial_language = (
+        initial_language if initial_language in _REPORT_TRANSLATIONS else "en"
+    )
 
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{_e(initial_language)}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>LinkedIn Job Fit Report · {query}</title>
+  <title data-i18n-title="{query}">{_e(_REPORT_TRANSLATIONS["en"]["app.title_template"].format(query=report.get("query", "")))}</title>
   <style>{_REPORT_CSS}</style>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to report</a>
+  <a class="skip-link" href="#main" data-i18n="app.skip">{_e(_i18n_text("app.skip"))}</a>
   <main class="shell" id="main">
     <header class="hero">
-      <p class="eyebrow">LinkedIn job comparison</p>
-      <h1>Fit report for “{query}”</h1>
-      <div class="hero-meta">
-        <span>Generated {_e(generated_at)}</span>
-        <span>Profile: {profile_link}</span>
-        <span>{_e(report['jobs_analyzed'])} jobs analysed</span>
+      <p class="eyebrow" data-i18n="app.kicker">{_e(_i18n_text("app.kicker"))}</p>
+      <h1 data-i18n-title="{query}">
+        {_e(_REPORT_TRANSLATIONS["en"]["app.title_template"].format(query=report.get("query", "")))}
+      </h1>
+      <div class="language-switcher" role="group" aria-label="{_e(_i18n_text("language.label"))}" data-i18n-aria="language.label">
+        <button type="button" data-language="en" lang="en" aria-pressed="true">English</button>
+        <button type="button" data-language="zh" lang="zh-CN" aria-pressed="false">中文</button>
+        <button type="button" data-language="de" lang="de" aria-pressed="false">Deutsch</button>
       </div>
-      <p>{_e(report['methodology'])}</p>
+      <div class="hero-meta">
+        <span><span data-i18n="app.generated">{_e(_i18n_text("app.generated"))}</span> {_e(generated_at)}</span>
+        <span><span data-i18n="app.profile">{_e(_i18n_text("app.profile"))}</span>: {profile_link}</span>
+        <span>{_e(report['jobs_analyzed'])} <span data-i18n="app.jobs_analysed">{_e(_i18n_text("app.jobs_analysed"))}</span></span>
+      </div>
+      <p><strong data-i18n="overview.methodology_title">{_e(_i18n_text("overview.methodology_title"))}.</strong>
+        <span data-i18n="overview.methodology">{_e(_i18n_text("overview.methodology"))}</span></p>
     </header>
 
     <section class="section" aria-labelledby="overview-heading">
-      <h2 id="overview-heading">Overview</h2>
+      <h2 id="overview-heading" data-i18n="overview.title">{_e(_i18n_text("overview.title"))}</h2>
       <div class="stats">
-        <div class="stat"><strong>{_e(counts['strong_match'])}</strong><span>Strong matches</span></div>
-        <div class="stat"><strong>{_e(counts['good_match'])}</strong><span>Good matches</span></div>
-        <div class="stat"><strong>{_e(counts['possible_match'])}</strong><span>Worth reviewing</span></div>
-        <div class="stat"><strong>{_e(counts['stretch'])}</strong><span>Stretch roles</span></div>
+        <div class="stat"><strong>{_e(counts['strong_match'])}</strong><span data-i18n="overview.strong">{_e(_i18n_text("overview.strong"))}</span></div>
+        <div class="stat"><strong>{_e(counts['good_match'])}</strong><span data-i18n="overview.good">{_e(_i18n_text("overview.good"))}</span></div>
+        <div class="stat"><strong>{_e(counts['possible_match'])}</strong><span data-i18n="overview.review">{_e(_i18n_text("overview.review"))}</span></div>
+        <div class="stat"><strong>{_e(counts['stretch'])}</strong><span data-i18n="overview.stretch">{_e(_i18n_text("overview.stretch"))}</span></div>
       </div>
       <div class="signals" style="margin-top:16px">
         <section class="panel">
-          <h3>Repeated strengths</h3>
-          <div class="chips">{strengths or '<span class="chip">No repeated skill matches</span>'}</div>
+          <h3 data-i18n="overview.strengths">{_e(_i18n_text("overview.strengths"))}</h3>
+          <div class="chips">{strengths or f'<span class="chip">{_i18n_span("overview.no_strengths")}</span>'}</div>
         </section>
         <section class="panel">
-          <h3>Repeated gaps</h3>
-          <div class="chips">{gaps or '<span class="chip">No repeated skill gaps</span>'}</div>
+          <h3 data-i18n="overview.gaps">{_e(_i18n_text("overview.gaps"))}</h3>
+          <div class="chips">{gaps or f'<span class="chip">{_i18n_span("overview.no_gaps")}</span>'}</div>
         </section>
       </div>
     </section>
 
     <section class="section" aria-labelledby="comparison-heading">
-      <h2 id="comparison-heading">Job comparison</h2>
+      <h2 id="comparison-heading" data-i18n="comparison.title">{_e(_i18n_text("comparison.title"))}</h2>
       <div class="table-wrap">
         <table>
-          <caption>Ranked from strongest to weakest evidence match.</caption>
+          <caption data-i18n="comparison.caption">{_e(_i18n_text("comparison.caption"))}</caption>
           <thead>
             <tr>
-              <th scope="col">Job</th>
-              <th scope="col">Company</th>
-              <th scope="col">Location</th>
-              <th scope="col">Score</th>
-              <th scope="col">Assessment</th>
-              <th scope="col">Matched evidence</th>
+              <th scope="col" data-i18n="table.job">{_e(_i18n_text("table.job"))}</th>
+              <th scope="col" data-i18n="table.company">{_e(_i18n_text("table.company"))}</th>
+              <th scope="col" data-i18n="table.location">{_e(_i18n_text("table.location"))}</th>
+              <th scope="col" data-i18n="table.score">{_e(_i18n_text("table.score"))}</th>
+              <th scope="col" data-i18n="table.assessment">{_e(_i18n_text("table.assessment"))}</th>
+              <th scope="col" data-i18n="table.matched">{_e(_i18n_text("table.matched"))}</th>
             </tr>
           </thead>
           <tbody>{summary_rows}</tbody>
@@ -1240,22 +1919,64 @@ def render_fit_report_html(
     </section>
 
     <section class="section" aria-labelledby="details-heading">
-      <h2 id="details-heading">Detailed comparison</h2>
-      <div class="job-list">{''.join(job_cards) or '<p class="panel">No job postings were returned.</p>'}</div>
+      <h2 id="details-heading" data-i18n="details.title">{_e(_i18n_text("details.title"))}</h2>
+      <div class="job-list">{''.join(job_cards) or f'<p class="panel">{_i18n_span("details.no_postings")}</p>'}</div>
     </section>
 
     <aside class="methodology">
-      <strong>How to read this report.</strong> A high score means more of the
-      captured posting language overlaps the profile evidence and the role/title
-      signals align. A missing skill means it was not found in the captured
-      profile sections; it does not prove the skill is absent from your
-      experience. Use the evidence to decide what to verify before applying.
+      <strong data-i18n="methodology.title">{_e(_i18n_text("methodology.title"))}.</strong>
+      <span data-i18n="methodology.body">{_e(_i18n_text("methodology.body"))}</span>
+      <p data-i18n="footer.language_note">{_e(_i18n_text("footer.language_note"))}</p>
     </aside>
     <footer>
-      Generated locally by LinkedIn Jobs MCP Server. LinkedIn is a trademark of
-      LinkedIn Corporation. This independent report is not affiliated with LinkedIn.
+      <span data-i18n="footer.disclaimer">{_e(_i18n_text("footer.disclaimer"))}</span>
     </footer>
   </main>
+  <script>
+    const translations = {translations_json};
+    const reportQuery = {json.dumps(report.get("query", ""), ensure_ascii=False)};
+    function translate(language) {{
+      const dictionary = translations[language] || translations.en;
+      document.documentElement.lang = language === "zh" ? "zh-CN" : language;
+      document.querySelectorAll("[data-i18n]").forEach((element) => {{
+        const value = dictionary[element.dataset.i18n];
+        if (value) element.textContent = value;
+      }});
+      document.querySelectorAll("[data-i18n-template]").forEach((element) => {{
+        const value = dictionary[element.dataset.i18nTemplate];
+        if (value) element.textContent = value.replace("{{count}}", element.dataset.count || "");
+      }});
+      document.querySelectorAll("[data-i18n-label]").forEach((element) => {{
+        const value = dictionary[element.dataset.i18nLabel];
+        if (value) element.dataset.label = value;
+      }});
+      document.querySelectorAll("[data-i18n-aria]").forEach((element) => {{
+        const value = dictionary[element.dataset.i18nAria];
+        if (value) element.setAttribute(
+          "aria-label",
+          value.replace("{{score}}", element.dataset.score || "")
+        );
+      }});
+      document.querySelectorAll("[data-summary-en]").forEach((element) => {{
+        element.textContent = element.dataset[
+          language === "zh" ? "summaryZh" : language === "de" ? "summaryDe" : "summaryEn"
+        ] || element.dataset.summaryEn;
+      }});
+      const titleTemplate = dictionary["app.title_template"];
+      const title = titleTemplate.replace("{{query}}", reportQuery);
+      document.title = title;
+      document.querySelectorAll("[data-i18n-title]").forEach((element) => {{
+        element.textContent = title;
+      }});
+      document.querySelectorAll("[data-language]").forEach((button) => {{
+        button.setAttribute("aria-pressed", String(button.dataset.language === language));
+      }});
+    }}
+    document.querySelectorAll("[data-language]").forEach((button) => {{
+      button.addEventListener("click", () => translate(button.dataset.language));
+    }});
+    translate({json.dumps(initial_language)});
+  </script>
 </body>
 </html>
 """
