@@ -945,10 +945,16 @@ async def _collect_analysis(
                     )
                 )
             fallback_attempts: list[dict[str, Any]] = []
+            target_results = args.limit if args.limit > 0 else 10
+            initial_merged = merge_job_search_results(
+                search_results,
+                all_query_specs,
+            )
+            initial_result_count = len(initial_merged.get("job_ids", []))
             if (
                 not args.strict_filters
                 and search_results
-                and not any(result.get("job_ids") for result in search_results)
+                and initial_result_count < target_results
             ):
                 fallback_queries: list[tuple[str, str]] = []
                 skills = search_context.get("skills", [])
@@ -993,7 +999,11 @@ async def _collect_analysis(
                             ],
                         }
                     )
-                    if fallback_result.get("job_ids"):
+                    merged_so_far = merge_job_search_results(
+                        search_results,
+                        all_query_specs,
+                    )
+                    if len(merged_so_far.get("job_ids", [])) >= target_results:
                         break
             search_result = merge_job_search_results(
                 search_results,
@@ -1005,6 +1015,9 @@ async def _collect_analysis(
                     "used": True,
                     "attempts": fallback_attempts,
                     "found_jobs": bool(search_result.get("job_ids")),
+                    "initial_result_count": initial_result_count,
+                    "target_results": target_results,
+                    "final_result_count": len(search_result.get("job_ids", [])),
                 }
             search_result["resume_search_signals"] = {
                 "skills": search_context["skills"],

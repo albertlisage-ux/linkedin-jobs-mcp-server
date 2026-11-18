@@ -195,12 +195,14 @@ duplicate jobs and analyzes the merged result. The report records the resume
 signals and every query used, so the search remains explainable.
 
 Resume queries use broad two-term skill combinations rather than long
-all-terms-at-once searches. If every initial query returns zero jobs, the search
-automatically retries with the top two skills, then the top single skill, and
-finally all jobs from the selected company when a company filter is present.
-These fallback attempts relax location, recency, work type, job type, experience
-level and Easy Apply while preserving the company filter. The HTML report marks
-that a fallback was used. Add `--strict-filters` to disable relaxation.
+all-terms-at-once searches. If the initial queries return fewer jobs than the
+requested `--limit`, the search automatically retries with the top two skills,
+then the top single skill, and finally all jobs from the selected company when a
+company filter is present. It keeps trying until it reaches the target or runs
+out of fallback queries. These fallback attempts relax location, recency, work
+type, job type, experience level and Easy Apply while preserving the company
+filter. The HTML report marks that a fallback was used and records the initial
+and final result counts. Add `--strict-filters` to disable relaxation.
 
 `--resume` accepts UTF-8 `.txt`/`.md` files and text-based PDF resumes. Scanned
 PDFs need OCR first. For example:

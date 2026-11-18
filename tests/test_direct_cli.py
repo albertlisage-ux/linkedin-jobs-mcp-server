@@ -118,7 +118,7 @@ async def test_company_names_are_resolved_to_linkedin_ids():
     ]
 
 
-async def test_resume_search_relaxes_filters_when_initial_results_are_empty(
+async def test_resume_search_broadens_when_fewer_than_requested_jobs_exist(
     monkeypatch, tmp_path
 ):
     import fastmcp
@@ -131,6 +131,7 @@ async def test_resume_search_relaxes_filters_when_initial_results_are_empty(
 
     class Client:
         search_arguments = []
+        fallback_calls = 0
 
         def __init__(self, server):
             pass
@@ -145,16 +146,20 @@ async def test_resume_search_relaxes_filters_when_initial_results_are_empty(
             if name == "search_jobs":
                 self.search_arguments.append(arguments)
                 if arguments["location"] is None:
+                    type(self).fallback_calls += 1
+                    added_id = (
+                        "102" if type(self).fallback_calls == 1 else "103"
+                    )
                     data = {
                         "url": "https://www.linkedin.com/jobs/search/",
-                        "sections": {"search_results": "Data Engineer"},
-                        "job_ids": ["101"],
+                        "sections": {"search_results": f"Data Engineer {added_id}"},
+                        "job_ids": [added_id],
                         "references": {
                             "search_results": [
                                 {
                                     "kind": "job",
-                                    "url": "/jobs/view/101/",
-                                    "text": "Data Engineer",
+                                    "url": f"/jobs/view/{added_id}/",
+                                    "text": f"Data Engineer {added_id}",
                                 }
                             ]
                         },
@@ -162,18 +167,24 @@ async def test_resume_search_relaxes_filters_when_initial_results_are_empty(
                 else:
                     data = {
                         "url": "https://www.linkedin.com/jobs/search/",
-                        "sections": {"search_results": "No jobs"},
-                        "job_ids": [],
-                        "section_errors": {
-                            "search_results": {
-                                "error_type": "no_matching_jobs",
-                                "error_message": "No matching jobs",
-                            }
+                        "sections": {"search_results": "Data Engineer 101"},
+                        "job_ids": ["101"],
+                        "references": {
+                            "search_results": [
+                                {
+                                    "kind": "job",
+                                    "url": "/jobs/view/101/",
+                                    "text": "Data Engineer 101",
+                                }
+                            ]
                         },
                     }
             else:
                 data = {
-                    "url": "https://www.linkedin.com/jobs/view/101/",
+                    "url": (
+                        f"https://www.linkedin.com/jobs/view/"
+                        f"{arguments['job_id']}/"
+                    ),
                     "sections": {
                         "job_posting": (
                             "Data Engineer\nAcme · Berlin · Remote\n"
@@ -203,7 +214,7 @@ async def test_resume_search_relaxes_filters_when_initial_results_are_empty(
         work_type="remote",
         easy_apply=False,
         sort=None,
-        limit=1,
+        limit=3,
         profile_sections="experience,skills",
         profile_scrolls=10,
     )
@@ -216,7 +227,9 @@ async def test_resume_search_relaxes_filters_when_initial_results_are_empty(
 
     assert search_result["fallback_search"]["used"] is True
     assert search_result["fallback_search"]["found_jobs"] is True
-    assert search_result["job_ids"] == ["101"]
+    assert search_result["fallback_search"]["initial_result_count"] == 1
+    assert search_result["fallback_search"]["target_results"] == 3
+    assert search_result["job_ids"] == ["101", "102", "103"]
     assert Client.search_arguments[-1]["location"] is None
     assert Client.search_arguments[-1]["work_type"] is None
     assert profile["url"] == str(resume)
