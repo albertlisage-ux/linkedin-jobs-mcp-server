@@ -33,7 +33,7 @@ def _profile():
     return {
         "url": "https://www.linkedin.com/in/example/",
         "sections": {
-            "main_profile": "Data platform professional",
+            "main_profile": "Alex Example\nData platform professional",
             "experience": "Senior Data Engineer at Acme\n2021 - Present",
             "skills": "Python\nSQL\nAirflow\nAWS",
         },
@@ -83,6 +83,8 @@ def test_fit_report_ranks_by_observable_profile_evidence():
     )
 
     assert report["jobs_analyzed"] == 2
+    assert report["profile_name"] == "Alex Example"
+    assert report["recent_role"] == "Senior Data Engineer at Acme"
     first, second = report["jobs"]
     assert first["job_id"] == "101"
     assert first["fit_rating"] == "Strong match"
@@ -103,6 +105,9 @@ def test_fit_report_ranks_by_observable_profile_evidence():
     assert first["improvement_plan"]
     assert first["improvement_plan"][0]["skill"] == "Kubernetes"
     assert len(first["improvement_plan"][0]["steps_i18n"]["en"]) == 4
+    assert "existing" in first["improvement_plan"][0]["personal_context_i18n"]["en"]
+    assert "Kubernetes" in first["improvement_plan"][0]["project_idea_i18n"]["en"]
+    assert "Senior Data Engineer" in first["improvement_plan"][0]["project_idea_i18n"]["en"]
     assert report["improvement_roadmap"]
 
 
@@ -158,6 +163,10 @@ def test_html_report_compares_overview_and_details_and_escapes_content():
     assert "Full job description" in rendered
     assert "Improvement roadmap" in rendered
     assert "Verify that Kubernetes is genuinely missing" in rendered
+    assert "Your personal bridge" in rendered
+    assert "Recommended project" in rendered
+    assert "Use your existing" in rendered
+    assert "Alex Example" in rendered
     assert "data-text-zh=" in rendered
     assert "data-text-de=" in rendered
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in rendered

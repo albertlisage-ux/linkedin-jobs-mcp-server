@@ -652,70 +652,274 @@ def _priority_for_gap(count: int, total_jobs: int) -> str:
     return "low"
 
 
-def _skill_improvement_steps(skill: str) -> dict[str, list[str]]:
+_SKILL_BRIDGES: dict[str, tuple[str, ...]] = {
+    "Airflow": ("Python", "SQL", "Spark"),
+    "AWS": ("Linux", "Docker", "Terraform", "Python"),
+    "Azure": ("Linux", "Docker", "Terraform", "Python"),
+    "BigQuery": ("SQL", "Data Analysis", "Python"),
+    "Computer Vision": ("Python", "Machine Learning", "PyTorch", "TensorFlow"),
+    "Databricks": ("Spark", "Python", "SQL", "Data Analysis"),
+    "dbt": ("SQL", "Data Analysis", "Snowflake", "BigQuery"),
+    "Django": ("Python", "SQL", "Docker"),
+    "Docker": ("Linux", "CI/CD", "Bash"),
+    "FastAPI": ("Python", "SQL", "Docker"),
+    "Figma": ("UX", "UI Design", "Prototyping", "Wireframing"),
+    "Flask": ("Python", "SQL", "Docker"),
+    "GCP": ("Linux", "Docker", "Terraform", "Python"),
+    "Java": ("Spring", "SQL", "Kafka"),
+    "JavaScript": ("HTML", "CSS", "TypeScript"),
+    "Kafka": ("Python", "Java", "SQL"),
+    "Kubernetes": ("Docker", "Linux", "CI/CD"),
+    "LangChain": ("Python", "LLM", "Machine Learning"),
+    "LLM": ("Python", "Machine Learning", "Natural Language Processing"),
+    "Machine Learning": ("Python", "Pandas", "NumPy", "scikit-learn"),
+    "MLOps": ("Machine Learning", "Docker", "Kubernetes", "CI/CD"),
+    "MongoDB": ("SQL", "Python", "Data Analysis"),
+    "MySQL": ("SQL", "Data Analysis"),
+    "Natural Language Processing": ("Python", "Machine Learning", "LLM"),
+    "Next.js": ("React", "JavaScript", "TypeScript"),
+    "Node.js": ("JavaScript", "TypeScript"),
+    "NumPy": ("Python", "Pandas", "Data Analysis"),
+    "Pandas": ("Python", "NumPy", "Data Analysis"),
+    "PostgreSQL": ("SQL", "Data Analysis"),
+    "Power BI": ("Data Analysis", "SQL", "Excel"),
+    "Product Management": (
+        "Business Analysis",
+        "Data Analysis",
+        "Project Management",
+        "Stakeholder Management",
+    ),
+    "Project Management": (
+        "Agile",
+        "Scrum",
+        "Jira",
+        "Stakeholder Management",
+    ),
+    "PyTorch": ("Python", "Machine Learning", "NumPy"),
+    "React": ("JavaScript", "TypeScript", "HTML", "CSS"),
+    "Redis": ("SQL", "Python", "Docker"),
+    "Salesforce": ("CRM", "Data Analysis"),
+    "scikit-learn": ("Python", "Pandas", "NumPy", "Machine Learning"),
+    "Snowflake": ("SQL", "Data Analysis", "dbt"),
+    "Spark": ("Python", "SQL", "Data Analysis"),
+    "Spring": ("Java", "SQL", "Docker"),
+    "SQL": ("Data Analysis", "Python", "Excel"),
+    "Stakeholder Management": ("Project Management", "Business Analysis"),
+    "Tableau": ("Data Analysis", "SQL", "Excel"),
+    "TensorFlow": ("Python", "Machine Learning", "NumPy"),
+    "Terraform": ("AWS", "Azure", "GCP", "CI/CD"),
+    "TypeScript": ("JavaScript", "React", "Node.js"),
+    "UI Design": ("UX", "Figma", "Prototyping", "Wireframing"),
+    "UX": ("UI Design", "Figma", "Prototyping", "Wireframing"),
+    "Vue": ("JavaScript", "TypeScript", "HTML", "CSS"),
+}
+
+
+def _profile_name(profile: dict[str, Any]) -> str | None:
+    sections = profile.get("sections")
+    if not isinstance(sections, dict):
+        return None
+    main = str(sections.get("main_profile") or sections.get("profile_document") or "")
+    blocked = {
+        "about",
+        "contact info",
+        "experience",
+        "followers",
+        "following",
+        "message",
+        "open to",
+        "profile",
+        "show all",
+        "skills",
+    }
+    role_words = {
+        "analyst",
+        "architect",
+        "consultant",
+        "developer",
+        "engineer",
+        "manager",
+        "professional",
+        "scientist",
+        "specialist",
+        "student",
+    }
+    for line in _clean_lines(main)[:6]:
+        folded = line.casefold()
+        if any(marker in folded for marker in blocked):
+            continue
+        if role_words & set(re.findall(r"[a-z]+", folded)):
+            continue
+        if len(line) < 2 or len(line) > 80 or "·" in line:
+            continue
+        return line
+    return None
+
+
+def _profile_recent_role(profile: dict[str, Any]) -> str | None:
+    sections = profile.get("sections")
+    if not isinstance(sections, dict):
+        return None
+    experience = str(sections.get("experience") or "")
+    blocked = {
+        "experience",
+        "show all",
+        "show less",
+    }
+    for line in _clean_lines(experience)[:12]:
+        folded = line.casefold()
+        if folded in blocked:
+            continue
+        range_match = _EXPERIENCE_RANGE_RE.search(line)
+        if range_match:
+            line = line[: range_match.start()].strip(" -|·")
+            if len(line) < 3:
+                continue
+        if re.fullmatch(r"(?:19|20)\d{2}.*", line):
+            continue
+        if len(line) < 3 or len(line) > 120:
+            continue
+        return line
+    return None
+
+
+def _personal_bridge_skills(
+    skill: str,
+    profile_skills: set[str],
+    fallback_skills: list[str],
+) -> list[str]:
+    preferred = _SKILL_BRIDGES.get(skill, ())
+    bridges = [candidate for candidate in preferred if candidate in profile_skills]
+    if not bridges:
+        bridges = [
+            candidate
+            for candidate in fallback_skills
+            if candidate != skill
+        ]
+    return bridges[:2]
+
+
+def _skill_improvement_steps(
+    skill: str,
+    *,
+    bridge_skills: list[str],
+    recent_role: str | None,
+) -> tuple[dict[str, list[str]], dict[str, str], dict[str, str]]:
+    bridge_text = ", ".join(bridge_skills)
+    role_text = recent_role or "your current role"
+    if bridge_skills:
+        context = {
+            "en": (
+                f"Use your existing {bridge_text} evidence as the bridge into {skill}."
+            ),
+            "zh": f"以你已有的 {bridge_text} 经验为基础，逐步衔接 {skill}。",
+            "de": (
+                f"Nutze deine vorhandenen Nachweise zu {bridge_text} als Brücke zu {skill}."
+            ),
+        }
+        project = {
+            "en": (
+                f"Use your {bridge_text} work as a starting point, then extend "
+                f"it so it also demonstrates {skill}, with a result relevant "
+                f"to {role_text}."
+            ),
+            "zh": (
+                f"扩展一个 {bridge_text} 项目，使其同时体现 {skill}，"
+                f"并与你在{role_text}中的实际工作相关。"
+            ),
+            "de": (
+                f"Erweitere ein Projekt mit {bridge_text}, sodass es zusätzlich "
+                f"{skill} zeigt und für deine Rolle als {role_text} relevant ist."
+            ),
+        }
+    else:
+        context = {
+            "en": f"Start with the fundamentals of {skill} and connect them to {role_text}.",
+            "zh": f"先学习 {skill} 的基础，并把它与你当前“{role_text}”相关工作联系起来。",
+            "de": (
+                f"Beginne mit den Grundlagen von {skill} und verbinde sie mit "
+                f"deiner Rolle als {role_text}."
+            ),
+        }
+        project = {
+            "en": (
+                f"Build a small end-to-end project for {role_text} that produces "
+                f"one visible outcome using {skill}."
+            ),
+            "zh": (
+                f"围绕你当前的“{role_text}”工作完成一个端到端小项目，"
+                f"使用 {skill} 产出一个可展示的结果。"
+            ),
+            "de": (
+                f"Baue ein kleines End-to-End-Projekt für deine Rolle als "
+                f"{role_text}, das mit {skill} ein sichtbares Ergebnis liefert."
+            ),
+        }
     return {
         "en": [
             (
-                f"Verify that {skill} is genuinely missing, then review its "
-                "official documentation or one reputable structured guide."
+                f"Verify that {skill} is genuinely missing. {context['en']} "
+                "Review the official documentation and one structured guide."
             ),
             (
-                f"Build a small project that uses {skill}; publish the code "
-                "with a concise README explaining the decisions and results."
+                f"{project['en']} Publish the code, architecture notes and a "
+                "short README with measurable outcomes."
             ),
             (
-                f"Add {skill} to your resume or LinkedIn profile only when you "
-                "can support it with a concrete project and measurable outcome."
+                f"Add {skill} to your resume or LinkedIn profile only after you "
+                "can support it with this project and its result."
             ),
             (
-                f"Prepare a two-minute explanation of a trade-off or problem "
-                f"you solved with {skill} for interviews."
+                f"Prepare a two-minute interview story explaining how you moved "
+                f"from {bridge_text or role_text} to solving a real problem with {skill}."
             ),
         ],
         "zh": [
             (
-                f"先确认 {skill} 是否确实缺失，然后阅读官方文档或一份可靠的系统教程。"
+                f"先确认 {skill} 是否确实缺失。{context['zh']}"
+                "阅读官方文档和一份系统教程。"
             ),
+            f"{project['zh']}公开代码、架构说明和带可量化结果的简短 README。",
+            f"只有在项目与结果能够支撑时，才把 {skill} 写入简历或 LinkedIn 档案。",
             (
-                f"完成一个使用 {skill} 的小项目，公开代码并附上简短 README，"
-                "说明技术选择与结果。"
+                f"准备一段两分钟面试表达，说明你如何从 {bridge_text or role_text} "
+                f"延伸到使用 {skill} 解决实际问题。"
             ),
-            (
-                f"只有在拥有具体项目和可量化成果后，才把 {skill} 写入简历或 LinkedIn 档案。"
-            ),
-            f"准备一段两分钟说明，讲清你使用 {skill} 解决的权衡或实际问题，用于面试。",
         ],
         "de": [
             (
-                f"Prüfe, ob {skill} wirklich fehlt, und arbeite anschließend die "
-                "offizielle Dokumentation oder einen seriösen strukturierten Leitfaden durch."
+                f"Prüfe, ob {skill} wirklich fehlt. {context['de']} "
+                "Arbeite die offizielle Dokumentation und einen strukturierten Leitfaden durch."
             ),
             (
-                f"Baue ein kleines Projekt mit {skill}, veröffentliche den Code "
-                "und dokumentiere Entscheidungen und Ergebnisse in einer kurzen README."
+                f"{project['de']} Veröffentliche Code, Architekturhinweise und "
+                "eine kurze README mit messbaren Ergebnissen."
             ),
             (
                 f"Nimm {skill} erst dann in Lebenslauf oder LinkedIn-Profil auf, "
-                "wenn ein konkretes Projekt und ein messbares Ergebnis vorliegen."
+                "wenn Projekt und Ergebnis den Nachweis tragen."
             ),
             (
-                f"Bereite für Vorstellungsgespräche eine zweiminütige Erklärung "
-                f"zu einem Trade-off oder Problem mit {skill} vor."
+                f"Bereite eine zweiminütige Interviewgeschichte vor, wie du von "
+                f"{bridge_text or role_text} zu einer echten Lösung mit {skill} gekommen bist."
             ),
         ],
-    }
+    }, context, project
 
 
 def _experience_improvement_steps(
     required: int,
     current: float | None,
+    recent_role: str | None,
 ) -> dict[str, list[str]]:
     current_text = f"{current:g}" if current is not None else "unknown"
+    role_text = recent_role or "your current role"
     return {
         "en": [
             (
                 f"Compare the posting's {required}+ years with your captured "
-                f"{current_text} years and list the duties that lack evidence."
+                f"{current_text} years in {role_text}, and list the duties "
+                "that lack evidence."
             ),
             (
                 "Turn existing work into measurable case studies: scope, "
@@ -737,7 +941,7 @@ def _experience_improvement_steps(
         "zh": [
             (
                 f"对比职位要求的 {required}+ 年经验与你档案中的 {current_text} 年，"
-                "列出缺少证据的职责。"
+                f"结合“{role_text}”工作列出缺少证据的职责。"
             ),
             "把已有工作整理成可量化案例：范围、关键决策、技术难点、结果和业务影响。",
             "完成一到两个端到端项目，重点覆盖缺失的职责，而不是只做教程练习。",
@@ -747,7 +951,7 @@ def _experience_improvement_steps(
         "de": [
             (
                 f"Vergleiche die geforderten {required}+ Jahre mit den erfassten "
-                f"{current_text} Jahren und notiere Aufgaben ohne Nachweis."
+                f"{current_text} Jahren in {role_text} und notiere Aufgaben ohne Nachweis."
             ),
             (
                 "Forme vorhandene Arbeit in messbare Fallstudien um: Umfang, "
@@ -926,6 +1130,8 @@ def analyze_job_fit(
     )
     profile_level_name, profile_level = _detect_level(profile_level_text)
     profile_years = _profile_experience_years(profile_level_text)
+    profile_name = _profile_name(profile)
+    recent_role = _profile_recent_role(profile)
 
     jobs: list[dict[str, Any]] = []
     for index, entry in enumerate(selected):
@@ -949,15 +1155,32 @@ def analyze_job_fit(
     )
     gap_counts = Counter(skill for job in jobs for skill in job["missing_skills"])
     rating_counts = Counter(job["fit_rating_key"] for job in jobs)
-    all_gap_plans = [
-        {
-            "skill": skill,
-            "jobs": count,
-            "priority": _priority_for_gap(count, len(jobs)),
-            "steps_i18n": _skill_improvement_steps(skill),
-        }
-        for skill, count in gap_counts.most_common()
+    fallback_skills = [
+        skill for skill, _ in strength_counts.most_common(6)
     ]
+    all_gap_plans: list[dict[str, Any]] = []
+    for skill, count in gap_counts.most_common():
+        bridge_skills = _personal_bridge_skills(
+            skill,
+            profile_skills,
+            fallback_skills,
+        )
+        steps_i18n, context_i18n, project_i18n = _skill_improvement_steps(
+            skill,
+            bridge_skills=bridge_skills,
+            recent_role=recent_role,
+        )
+        all_gap_plans.append(
+            {
+                "skill": skill,
+                "jobs": count,
+                "priority": _priority_for_gap(count, len(jobs)),
+                "bridge_skills": bridge_skills,
+                "personal_context_i18n": context_i18n,
+                "project_idea_i18n": project_i18n,
+                "steps_i18n": steps_i18n,
+            }
+        )
     improvement_roadmap = all_gap_plans[:8]
     plan_by_skill = {item["skill"]: item for item in all_gap_plans}
     experience_gap_jobs = 0
@@ -977,6 +1200,7 @@ def analyze_job_fit(
                 "steps_i18n": _experience_improvement_steps(
                     job["years_required"],
                     profile_years,
+                    recent_role,
                 ),
             }
         else:
@@ -991,6 +1215,8 @@ def analyze_job_fit(
     return {
         "query": query,
         "profile_url": profile.get("url"),
+        "profile_name": profile_name,
+        "recent_role": recent_role,
         "profile_sections_read": sorted(sections) if isinstance(sections, dict) else [],
         "profile_skills_detected": sorted(profile_skills, key=str.casefold),
         "profile_level": profile_level_name,
@@ -1033,7 +1259,13 @@ def format_fit_report(report: dict[str, Any]) -> str:
         "LINKEDIN JOB FIT OVERVIEW",
         "",
         f'Search: {report["query"]}',
-        f'Profile: {report.get("profile_url") or "supplied profile document"}',
+        (
+            f'Profile: {report["profile_name"]} '
+            f'({report.get("profile_url") or "supplied profile document"})'
+            if report.get("profile_name")
+            else f'Profile: {report.get("profile_url") or "supplied profile document"}'
+        ),
+        f'Current/recent role: {report.get("recent_role") or "not identified"}',
         (
             "Profile signals: "
             f'{report.get("profile_level", "unspecified")}; '
@@ -1120,6 +1352,14 @@ def format_fit_report(report: dict[str, Any]) -> str:
             lines.append("Skill improvement steps:")
             for plan in job["improvement_plan"][:4]:
                 lines.append(f'- {plan["skill"]} ({plan["priority"]} priority)')
+                if plan.get("personal_context_i18n"):
+                    lines.append(
+                        f'  Personal bridge: {plan["personal_context_i18n"]["en"]}'
+                    )
+                if plan.get("project_idea_i18n"):
+                    lines.append(
+                        f'  Project idea: {plan["project_idea_i18n"]["en"]}'
+                    )
                 lines.extend(
                     f"  {index}. {step}"
                     for index, step in enumerate(
@@ -1148,6 +1388,9 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.title_template": "Fit report for “{query}”",
         "app.skip": "Skip to report",
         "app.generated": "Generated",
+        "app.prepared_for": "Prepared for",
+        "app.current_role": "Current or most recent role",
+        "app.this_profile": "This profile",
         "app.profile": "Profile",
         "app.jobs_analysed": "jobs analysed",
         "language.label": "Report language",
@@ -1177,6 +1420,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
             "approximately {gap} years to close."
         ),
         "improvement.for_role": "How to improve for this role",
+        "improvement.personal_bridge": "Your personal bridge",
+        "improvement.project_idea": "Recommended project",
         "improvement.profile_years": "Profile experience",
         "improvement.required_years": "Posting requirement",
         "improvement.no_gaps": "No missing skills detected in this analysis.",
@@ -1281,6 +1526,9 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.title_template": "“{query}”职位匹配报告",
         "app.skip": "跳到报告",
         "app.generated": "生成时间",
+        "app.prepared_for": "报告对象",
+        "app.current_role": "当前或最近职位",
+        "app.this_profile": "此档案",
         "app.profile": "档案",
         "app.jobs_analysed": "个职位已分析",
         "language.label": "报告语言",
@@ -1307,6 +1555,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
             "还需补足约 {gap} 年。"
         ),
         "improvement.for_role": "如何为该职位提升",
+        "improvement.personal_bridge": "适合你的衔接路径",
+        "improvement.project_idea": "推荐实践项目",
         "improvement.profile_years": "档案经验",
         "improvement.required_years": "职位要求",
         "improvement.no_gaps": "本次分析未检测到缺失技能。",
@@ -1405,6 +1655,9 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.title_template": "Passungsbericht für „{query}“",
         "app.skip": "Zum Bericht springen",
         "app.generated": "Erstellt",
+        "app.prepared_for": "Erstellt für",
+        "app.current_role": "Aktuelle oder letzte Rolle",
+        "app.this_profile": "Dieses Profil",
         "app.profile": "Profil",
         "app.jobs_analysed": "Stellen analysiert",
         "language.label": "Berichtssprache",
@@ -1435,6 +1688,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
             "etwa {gap} Jahre Lücke."
         ),
         "improvement.for_role": "So verbesserst du dich für diese Stelle",
+        "improvement.personal_bridge": "Deine persönliche Brücke",
+        "improvement.project_idea": "Empfohlenes Projekt",
         "improvement.profile_years": "Erfahrung im Profil",
         "improvement.required_years": "Anforderung der Stelle",
         "improvement.no_gaps": "In dieser Analyse wurden keine fehlenden Kompetenzen erkannt.",
@@ -2057,6 +2312,23 @@ def _steps_html(steps_i18n: dict[str, list[str]]) -> str:
     return "<ol>" + "".join(items) + "</ol>"
 
 
+def _multilingual_paragraph(
+    text_i18n: dict[str, str],
+    *,
+    css: str = "",
+) -> str:
+    english = text_i18n.get("en", "")
+    chinese = text_i18n.get("zh", english)
+    german = text_i18n.get("de", english)
+    return (
+        f'<p class="{_e(css)}" '
+        f'data-text-en="{_e(english)}" '
+        f'data-text-zh="{_e(chinese)}" '
+        f'data-text-de="{_e(german)}">'
+        f"{_e(english)}</p>"
+    )
+
+
 def render_fit_report_html(
     report: dict[str, Any],
     *,
@@ -2071,6 +2343,8 @@ def render_fit_report_html(
     query = _e(report.get("query"))
     profile_url = _safe_href(report.get("profile_url"))
     profile_label = _e(report.get("profile_url") or "Supplied profile document")
+    profile_name = _value_or_i18n(report.get("profile_name"), "app.this_profile")
+    recent_role = report.get("recent_role")
 
     summary_rows = "".join(
         f"""
@@ -2192,6 +2466,18 @@ def render_fit_report_html(
                     {_e(_i18n_text(f"priority.{plan['priority']}"))}
                   </span>
                 </h4>
+                <div class="snapshot">
+                  <strong data-i18n="improvement.personal_bridge">
+                    {_e(_i18n_text("improvement.personal_bridge"))}:
+                  </strong>
+                  {_multilingual_paragraph(plan.get("personal_context_i18n", {}))}
+                </div>
+                <div class="snapshot">
+                  <strong data-i18n="improvement.project_idea">
+                    {_e(_i18n_text("improvement.project_idea"))}:
+                  </strong>
+                  {_multilingual_paragraph(plan.get("project_idea_i18n", {}))}
+                </div>
                 {_steps_html(plan["steps_i18n"])}
                 """
             )
@@ -2338,6 +2624,14 @@ def render_fit_report_html(
               {_e(_i18n_text("common.jobs_count").format(count=item["jobs"]))}
             </span>
           </p>
+          <h4 data-i18n="improvement.personal_bridge">
+            {_e(_i18n_text("improvement.personal_bridge"))}
+          </h4>
+          {_multilingual_paragraph(item.get("personal_context_i18n", {}), css="snapshot")}
+          <h4 data-i18n="improvement.project_idea">
+            {_e(_i18n_text("improvement.project_idea"))}
+          </h4>
+          {_multilingual_paragraph(item.get("project_idea_i18n", {}), css="snapshot")}
           {_steps_html(item["steps_i18n"])}
         </article>
         """
@@ -2420,6 +2714,8 @@ def render_fit_report_html(
       </div>
       <div class="hero-meta">
         <span><span data-i18n="app.generated">{_e(_i18n_text("app.generated"))}</span> {_e(generated_at)}</span>
+        <span><span data-i18n="app.prepared_for">{_e(_i18n_text("app.prepared_for"))}</span>: {profile_name}</span>
+        {f'<span><span data-i18n="app.current_role">{_e(_i18n_text("app.current_role"))}</span>: {_e(recent_role)}</span>' if recent_role else ''}
         <span><span data-i18n="app.profile">{_e(_i18n_text("app.profile"))}</span>: {profile_link}</span>
         <span>{_e(report['jobs_analyzed'])} <span data-i18n="app.jobs_analysed">{_e(_i18n_text("app.jobs_analysed"))}</span></span>
       </div>

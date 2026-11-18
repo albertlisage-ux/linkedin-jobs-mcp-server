@@ -110,6 +110,7 @@ details of the selected postings, and prints:
 - repeated strengths and recurring skill gaps;
 - an improvement roadmap prioritized by how many jobs require each gap;
 - concrete learn, build, demonstrate and interview-preparation steps;
+- personal bridge projects built from your existing skills and current role;
 - experience-gap plans derived from captured profile date ranges;
 - a ranked fit score for each job with matched and missing evidence;
 - observed seniority, work mode, employment type and requested experience;
@@ -120,6 +121,11 @@ Each detailed job also has a collapsible improvement plan. The report never
 invents experience or recommends adding unsupported skills; each skill step
 starts by verifying the gap and then builds a project that can provide real
 evidence.
+
+The report identifies the profile name and current or most recent role when
+available. For each missing skill it selects the nearest skills already present
+in your profile, explains the bridge, and proposes a project that extends that
+existing evidence into the missing area.
 
 `search --analyze --html` writes a standalone responsive report containing the
 overview, ranking table and detailed comparison cards. The report opens in

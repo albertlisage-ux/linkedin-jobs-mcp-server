@@ -20,7 +20,8 @@ substantive changes are:
   seniority, responsibility and requirement matching with visible evidence,
   plus a standalone responsive HTML comparison report with English, Chinese
   and German interface translations, full posting details, prioritized skill
-  improvement roadmaps and experience-gap action plans.
+  improvement roadmaps, personalized bridge projects and experience-gap action
+  plans.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.
