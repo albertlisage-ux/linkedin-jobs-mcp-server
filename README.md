@@ -141,9 +141,12 @@ Use `--language en`, `--language zh` or `--language de` to choose the
 initial language. The report can switch between all three after opening.
 LinkedIn job descriptions and requirements remain in their original language.
 
-The score is an explainable keyword/evidence heuristic, not a hiring
-probability. To analyze a resume or profile text instead of the LinkedIn
-profile:
+The score is an explainable evidence heuristic, not a hiring probability.
+Required skills carry more weight than responsibilities, while general posting
+text has the lowest skill weight. The report separately shows role/title,
+domain, experience, seniority, language and certification alignment.
+
+To analyze a resume or profile text instead of the LinkedIn profile:
 
 ```bash
 linkedin-jobs-mcp analyze "platform engineer" \

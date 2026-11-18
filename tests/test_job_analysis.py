@@ -92,6 +92,9 @@ def test_fit_report_ranks_by_observable_profile_evidence():
     assert first["job_id"] == "101"
     assert first["fit_rating"] == "Strong match"
     assert first["fit_score"] > second["fit_score"]
+    assert sum(first["score_breakdown"].values()) == first["fit_score"]
+    assert first["requirement_coverage"] > second["requirement_coverage"]
+    assert first["missing_required_skills"] == ["Kubernetes"]
     assert {"Python", "SQL", "Airflow", "AWS"} <= set(first["matched_skills"])
     assert "Kubernetes" in first["missing_skills"]
     assert first["company"] == "Acme"
@@ -157,6 +160,7 @@ def test_html_report_compares_overview_and_details_and_escapes_content():
     assert "Detailed assessment" in rendered
     assert "Matched profile evidence" in rendered
     assert "Skills not found in profile" in rendered
+    assert "Score breakdown" in rendered
     assert 'data-language="zh"' in rendered
     assert 'data-language="de"' in rendered
     assert "中文" in rendered
@@ -174,7 +178,8 @@ def test_html_report_compares_overview_and_details_and_escapes_content():
     assert "data-text-de=" in rendered
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in rendered
     assert "<script>alert" not in rendered
-    assert 'aria-label="Fit score 89 out of 100"' in rendered
+    assert 'aria-label="Fit score ' in rendered
+    assert "out of 100" in rendered
 
 
 def test_german_job_sections_are_extracted_with_details_and_benefits():

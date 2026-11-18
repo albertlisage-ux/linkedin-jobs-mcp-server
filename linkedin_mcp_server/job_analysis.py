@@ -913,6 +913,91 @@ def _years_required(text: str) -> int | None:
     return min(matches) if matches else None
 
 
+def _experience_fit(required: int | None, current: float | None) -> float:
+    if required is None or current is None:
+        return 0.6
+    gap = max(0.0, required - current)
+    if gap <= 0:
+        return 1.0
+    if gap <= 1:
+        return 0.75
+    if gap <= 3:
+        return 0.45
+    return 0.15
+
+
+def _detected_domains(text: str) -> set[str]:
+    folded = text.casefold()
+    return {
+        domain
+        for domain, terms in _DOMAIN_SIGNALS.items()
+        if any(_term_pattern(term).search(folded) for term in terms)
+    }
+
+
+def _domain_fit(profile_text: str, job_text: str) -> float:
+    job_domains = _detected_domains(job_text)
+    if not job_domains:
+        return 0.5
+    return len(job_domains & _detected_domains(profile_text)) / len(job_domains)
+
+
+_LANGUAGE_PATTERNS = {
+    "English": ("english", "englisch"),
+    "German": ("german", "deutsch"),
+    "Chinese": ("chinese", "mandarin", "chinesisch"),
+    "French": ("french", "französisch"),
+    "Spanish": ("spanish", "spanisch"),
+}
+
+
+def _language_fit(profile_languages: str, job_text: str) -> float:
+    job_languages = {
+        language
+        for language, terms in _LANGUAGE_PATTERNS.items()
+        if any(_term_pattern(term).search(job_text) for term in terms)
+    }
+    if not job_languages:
+        return 1.0
+    profile_folded = profile_languages.casefold()
+    matched = sum(
+        1
+        for language, terms in _LANGUAGE_PATTERNS.items()
+        if language in job_languages
+        and any(term in profile_folded for term in terms)
+    )
+    return matched / len(job_languages)
+
+
+_CERTIFICATION_PATTERNS = {
+    "PMP": ("pmp", "project management professional"),
+    "PRINCE2": ("prince2",),
+    "Scrum": ("scrum master", "certified scrum"),
+    "AWS": ("aws certified", "aws certification"),
+    "Azure": ("azure certified", "azure certification"),
+    "Google Cloud": ("google cloud certified", "gcp certification"),
+    "Kubernetes": ("cka", "ckad", "kubernetes certification"),
+}
+
+
+def _certification_fit(profile_certifications: str, job_text: str) -> float:
+    job_certifications = {
+        name
+        for name, terms in _CERTIFICATION_PATTERNS.items()
+        if any(_term_pattern(term).search(job_text) for term in terms)
+    }
+    if not job_certifications:
+        return 1.0
+    profile_folded = profile_certifications.casefold()
+    matched = sum(
+        1
+        for name, terms in _CERTIFICATION_PATTERNS.items()
+        if name in job_certifications
+        and any(term in profile_folded for term in terms)
+    )
+    return matched / len(job_certifications)
+
+
 _MONTHS = {
     "jan": 1,
     "january": 1,
@@ -1377,36 +1462,102 @@ def _analyze_one_job(
     profile_level: int | None,
     profile_level_name: str,
     profile_years: float | None,
+    profile_headline: str,
+    profile_match_text: str,
+    profile_languages: str,
+    profile_certifications: str,
 ) -> dict[str, Any]:
     section = details.get("sections", {}).get("job_posting", "")
     job_text = str(section or "")
+    requirements = _section_items(
+        job_text, _REQUIREMENT_HEADINGS, limit=20
+    )
+    responsibilities = _section_items(
+        job_text, _RESPONSIBILITY_HEADINGS, limit=20
+    )
+    benefits = _section_items(job_text, _BENEFIT_HEADINGS, limit=20)
+    requirement_text = "\n".join(requirements)
+    responsibility_text = "\n".join(responsibilities)
     job_skills, expanded_profile_skills = _job_terms(job_text, profile_skill_lines)
+    required_skills, _ = _job_terms(requirement_text, profile_skill_lines)
+    responsibility_skills, _ = _job_terms(
+        responsibility_text, profile_skill_lines
+    )
     known_profile = profile_skills | expanded_profile_skills
     matched = sorted(job_skills & known_profile, key=str.casefold)
-    missing = sorted(job_skills - known_profile, key=str.casefold)
+    missing = sorted(
+        job_skills - known_profile,
+        key=lambda skill: (skill not in required_skills, skill.casefold()),
+    )
+
+    skill_weights = {
+        skill: (
+            3
+            if skill in required_skills
+            else 2
+            if skill in responsibility_skills
+            else 1
+        )
+        for skill in job_skills
+    }
+    total_skill_weight = sum(skill_weights.values())
+    matched_skill_weight = sum(
+        weight for skill, weight in skill_weights.items() if skill in known_profile
+    )
+    weighted_coverage = (
+        matched_skill_weight / total_skill_weight
+        if total_skill_weight
+        else 0.0
+    )
+    requirement_coverage = (
+        len(required_skills & known_profile) / len(required_skills)
+        if required_skills
+        else weighted_coverage
+    )
 
     comparison_query = entry.get("search_query", query)
     query_tokens = _significant_tokens(str(comparison_query))
     title = entry.get("title", "")
-    title_tokens = _significant_tokens(f"{title} {job_text[:800]}")
-    role_alignment = (
+    title_tokens = _significant_tokens(title)
+    query_alignment = (
         len(query_tokens & title_tokens) / len(query_tokens)
         if query_tokens
         else 0.0
     )
+    headline_tokens = _significant_tokens(profile_headline)
+    headline_alignment = (
+        len(headline_tokens & title_tokens) / len(headline_tokens)
+        if headline_tokens
+        else 0.0
+    )
+    role_alignment = max(query_alignment, headline_alignment)
 
     level_name, job_level = _detect_level(title)
     if job_level is None:
         level_name, job_level = _detect_level(job_text[:1200])
     seniority_fit = _level_alignment(job_level, profile_level)
-    coverage = len(matched) / len(job_skills) if job_skills else 0.0
-    score = round(
-        100 * (0.55 * coverage + 0.30 * role_alignment + 0.15 * seniority_fit)
+    years_required = _years_required(job_text)
+    experience_alignment = _experience_fit(years_required, profile_years)
+    domain_alignment = _domain_fit(profile_match_text, job_text)
+    language_alignment = _language_fit(profile_languages, job_text)
+    certification_alignment = _certification_fit(
+        profile_certifications,
+        requirement_text or job_text,
     )
+    score_breakdown = {
+        "skill_evidence": round(50 * weighted_coverage),
+        "role_alignment": round(15 * role_alignment),
+        "domain_alignment": round(10 * domain_alignment),
+        "seniority": round(10 * seniority_fit),
+        "experience": round(10 * experience_alignment),
+        "language_certification": round(
+            5 * ((language_alignment + certification_alignment) / 2)
+        ),
+    }
+    score = sum(score_breakdown.values())
     score = max(0, min(100, score))
     rating_key, rating = _rating(score)
     company, location, _ = _header_parts(job_text, title)
-    years_required = _years_required(job_text)
     experience_gap_years = (
         round(max(0.0, years_required - profile_years), 1)
         if years_required is not None and profile_years is not None
@@ -1440,22 +1591,26 @@ def _analyze_one_job(
         ),
         "matched_skills": matched,
         "missing_skills": missing,
+        "required_skills": sorted(required_skills, key=str.casefold),
+        "missing_required_skills": sorted(
+            required_skills - known_profile, key=str.casefold
+        ),
+        "requirement_coverage": round(requirement_coverage, 2),
+        "score_breakdown": score_breakdown,
         "job_level": level_name,
         "profile_level": profile_level_name,
         "seniority_alignment": round(seniority_fit, 2),
+        "experience_alignment": round(experience_alignment, 2),
+        "domain_alignment": round(domain_alignment, 2),
+        "language_alignment": round(language_alignment, 2),
+        "certification_alignment": round(certification_alignment, 2),
         "work_mode": _work_mode(job_text[:2000]),
         "employment_type": _employment_type(job_text[:2000]),
         "years_required": years_required,
         "experience_gap_years": experience_gap_years,
-        "responsibilities": _section_items(
-            job_text, _RESPONSIBILITY_HEADINGS, limit=20
-        ),
-        "requirements": _section_items(
-            job_text, _REQUIREMENT_HEADINGS, limit=20
-        ),
-        "benefits": _section_items(
-            job_text, _BENEFIT_HEADINGS, limit=20
-        ),
+        "responsibilities": responsibilities,
+        "requirements": requirements,
+        "benefits": benefits,
         "description_excerpt": _description_excerpt(job_text),
         "full_description": _full_description(job_text),
         "fit_summary_i18n": _fit_summary_i18n(
@@ -1495,6 +1650,39 @@ def analyze_job_fit(
     profile_years = _profile_experience_years(profile_level_text)
     profile_name = _profile_name(profile)
     recent_role = _profile_recent_role(profile)
+    profile_headline = (
+        str(sections.get("headline") or sections.get("main_profile") or "")
+        if isinstance(sections, dict)
+        else ""
+    )
+    profile_match_text = (
+        "\n".join(
+            str(sections.get(name, ""))
+            for name in (
+                "headline",
+                "summary",
+                "about",
+                "skills",
+                "experience",
+                "projects",
+                "certifications",
+                "languages",
+                "main_profile",
+            )
+        )
+        if isinstance(sections, dict)
+        else ""
+    )
+    profile_languages = (
+        str(sections.get("languages", ""))
+        if isinstance(sections, dict)
+        else ""
+    )
+    profile_certifications = (
+        str(sections.get("certifications", ""))
+        if isinstance(sections, dict)
+        else ""
+    )
 
     jobs: list[dict[str, Any]] = []
     for index, entry in enumerate(selected):
@@ -1509,6 +1697,10 @@ def analyze_job_fit(
                 profile_level=profile_level,
                 profile_level_name=profile_level_name,
                 profile_years=profile_years,
+                profile_headline=recent_role or profile_headline,
+                profile_match_text=profile_match_text,
+                profile_languages=profile_languages,
+                profile_certifications=profile_certifications,
             )
         )
     jobs.sort(key=lambda item: (-item["fit_score"], item["title"].casefold()))
@@ -1616,9 +1808,10 @@ def analyze_job_fit(
         ),
         "jobs": jobs,
         "methodology": (
-            "Fit is a heuristic based on skill evidence found in the captured "
-            "profile and posting, query/title overlap, and observed seniority "
-            "signals. It is not a hiring probability or an employer decision."
+            "Fit weights required skills more heavily than responsibilities and "
+            "general description text, then adds role/title, domain, experience, "
+            "seniority, language and certification alignment. It is not a hiring "
+            "probability or an employer decision."
         ),
     }
 
@@ -1716,6 +1909,13 @@ def format_fit_report(report: dict[str, Any]) -> str:
                     if value and value != "unspecified"
                 ),
                 f'Fit score: {job["fit_score"]}/100 ({job["confidence"]} confidence)',
+                (
+                    "Score breakdown: "
+                    + " · ".join(
+                        f"{name.replace('_', ' ')} {value}"
+                        for name, value in job.get("score_breakdown", {}).items()
+                    )
+                ),
                 f'LinkedIn: {job["url"]}',
                 f'Job ID: {job["job_id"]}',
                 (
@@ -1816,8 +2016,9 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "overview.stretch": "Stretch roles",
         "overview.methodology_title": "How this score works",
         "overview.methodology": (
-            "The score compares skill evidence, role/title overlap and "
-            "observed seniority signals. It is not a hiring probability."
+            "Requirements carry the most weight, followed by responsibilities. "
+            "Role, domain, experience, seniority, language and certification "
+            "alignment are shown separately. It is not a hiring probability."
         ),
         "overview.strengths": "Repeated strengths",
         "overview.gaps": "Repeated gaps",
@@ -1855,6 +2056,13 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "table.assessment": "Assessment",
         "table.matched": "Matched evidence",
         "score.of": "/100",
+        "score.breakdown": "Score breakdown",
+        "score.skill_evidence": "Skill evidence",
+        "score.role_alignment": "Role alignment",
+        "score.domain_alignment": "Domain alignment",
+        "score.seniority": "Seniority",
+        "score.experience": "Experience",
+        "score.language_certification": "Languages and certifications",
         "details.title": "Detailed comparison",
         "details.assessment": "Detailed assessment",
         "details.open": "Open LinkedIn posting",
@@ -1889,10 +2097,11 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "common.jobs_count": "{count} jobs",
         "methodology.title": "How to read this report",
         "methodology.body": (
-            "A high score means more of the captured posting language overlaps "
-            "the profile evidence and the role/title signals align. A missing "
-            "skill means it was not found in the captured profile sections; it "
-            "does not prove the skill is absent from your experience."
+            "Required skills count more than responsibilities and general "
+            "description text. The score also measures role/title, domain, "
+            "experience, seniority, language and certification alignment. "
+            "A missing skill means it was not found in the captured profile; "
+            "it does not prove the skill is absent from your experience."
         ),
         "footer.disclaimer": (
             "Generated locally by LinkedIn Jobs MCP Server. LinkedIn is a "
@@ -1965,8 +2174,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "overview.stretch": "挑战职位",
         "overview.methodology_title": "评分依据",
         "overview.methodology": (
-            "评分综合比较技能证据、职位/标题重合度以及识别到的资历信号。"
-            "该分数不是录用概率。"
+            "评分中职位要求的权重最高，其次是职责描述；同时分别展示职位名称、领域、"
+            "经验年限、资历、语言和证书匹配。该分数不是录用概率。"
         ),
         "overview.strengths": "重复出现的优势",
         "overview.gaps": "重复出现的差距",
@@ -2001,6 +2210,13 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "table.assessment": "评估",
         "table.matched": "匹配证据",
         "score.of": "/100",
+        "score.breakdown": "评分明细",
+        "score.skill_evidence": "技能证据",
+        "score.role_alignment": "职位匹配",
+        "score.domain_alignment": "领域匹配",
+        "score.seniority": "资历匹配",
+        "score.experience": "经验年限",
+        "score.language_certification": "语言与证书",
         "details.title": "详细对比",
         "details.assessment": "详细评估",
         "details.open": "打开 LinkedIn 职位",
@@ -2033,7 +2249,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "common.jobs_count": "{count} 个职位",
         "methodology.title": "如何阅读此报告",
         "methodology.body": (
-            "高分表示职位描述中的更多语言与档案证据重合，并且职位/标题信号一致。"
+            "职位要求中的技能权重高于职责和普通描述。评分还比较职位名称、领域、"
+            "经验年限、资历、语言和证书。"
             "“档案中未发现”只表示在本次读取的档案内容中没有找到，并不证明你完全没有该技能。"
         ),
         "footer.disclaimer": (
@@ -2107,9 +2324,9 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "overview.stretch": "Ambitionierte Rollen",
         "overview.methodology_title": "So funktioniert die Bewertung",
         "overview.methodology": (
-            "Die Bewertung vergleicht Kompetenznachweise, Überschneidungen bei "
-            "Rolle und Titel sowie erkannte Senioritätssignale. Sie ist keine "
-            "Einstellungswahrscheinlichkeit."
+            "Anforderungen wiegen am stärksten, danach Aufgaben. Rolle, Fachgebiet, "
+            "Berufserfahrung, Seniorität, Sprachen und Zertifikate werden getrennt "
+            "ausgewiesen. Dies ist keine Einstellungswahrscheinlichkeit."
         ),
         "overview.strengths": "Wiederkehrende Stärken",
         "overview.gaps": "Wiederkehrende Lücken",
@@ -2149,6 +2366,13 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "table.assessment": "Einschätzung",
         "table.matched": "Übereinstimmende Evidenz",
         "score.of": "/100",
+        "score.breakdown": "Bewertungsdetails",
+        "score.skill_evidence": "Kompetenznachweise",
+        "score.role_alignment": "Rollenpassung",
+        "score.domain_alignment": "Fachliche Passung",
+        "score.seniority": "Seniorität",
+        "score.experience": "Berufserfahrung",
+        "score.language_certification": "Sprachen und Zertifikate",
         "details.title": "Detailvergleich",
         "details.assessment": "Detailbewertung",
         "details.open": "LinkedIn-Stelle öffnen",
@@ -2187,11 +2411,11 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "common.jobs_count": "{count} Stellen",
         "methodology.title": "So liest du den Bericht",
         "methodology.body": (
-            "Eine hohe Bewertung bedeutet, dass mehr Sprache aus der "
-            "Stellenanzeige mit Profilnachweisen übereinstimmt und die "
-            "Rollen-/Titelsignale passen. „Nicht im Profil gefunden“ bedeutet "
-            "nur, dass die Kompetenz in den gelesenen Profilabschnitten nicht "
-            "vorkam; sie kann dennoch vorhanden sein."
+            "Geforderte Kompetenzen zählen stärker als Aufgaben und allgemeine "
+            "Beschreibung. Zusätzlich werden Rolle, Fachgebiet, Berufserfahrung, "
+            "Seniorität, Sprachen und Zertifikate bewertet. „Nicht im Profil "
+            "gefunden“ bedeutet nur, dass die Kompetenz in den gelesenen "
+            "Profilabschnitten nicht vorkam; sie kann dennoch vorhanden sein."
         ),
         "footer.disclaimer": (
             "Lokal erstellt mit LinkedIn Jobs MCP Server. LinkedIn ist eine "
@@ -2961,6 +3185,20 @@ def render_fit_report_html(
             if improvement_parts
             else f'<p class="snapshot">{_i18n_span("improvement.no_gaps")}</p>'
         )
+        score_maxima = {
+            "skill_evidence": 50,
+            "role_alignment": 15,
+            "domain_alignment": 10,
+            "seniority": 10,
+            "experience": 10,
+            "language_certification": 5,
+        }
+        score_breakdown_html = "".join(
+            f'<span class="chip">{_i18n_span(f"score.{key}")}: '
+            f"{_e(value)}/{maximum}</span>"
+            for key, maximum in score_maxima.items()
+            if (value := job.get("score_breakdown", {}).get(key)) is not None
+        )
         readiness_class = (
             "strong_match"
             if job["readiness"] == "ready"
@@ -3032,6 +3270,10 @@ def render_fit_report_html(
                   <div class="chips">
                     {''.join(f'<span class="chip">{item}</span>' for item in details)}
                   </div>
+                </section>
+                <section class="full">
+                  <h4 data-i18n="score.breakdown">{_e(_i18n_text("score.breakdown"))}</h4>
+                  <div class="chips">{score_breakdown_html}</div>
                 </section>
                 <section>
                   <h4 data-i18n="details.requirements">{_e(_i18n_text("details.requirements"))}</h4>

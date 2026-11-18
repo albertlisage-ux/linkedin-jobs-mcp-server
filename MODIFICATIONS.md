@@ -27,6 +27,9 @@ substantive changes are:
 - Resume extraction parses name, headline, location, contact, skills, languages,
   certifications, experience, education and projects into explicit sections;
   generated queries prioritize the parsed Top Skills and headline.
+- Job ranking weights required skills above responsibilities and general
+  description text, and exposes separate role, domain, experience, seniority,
+  language and certification score components.
 - Resume search uses shorter two-term queries and an adaptive fallback that
   relaxes optional filters only after a zero-result search, preserving company
   restrictions and reporting every fallback attempt.
