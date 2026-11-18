@@ -224,6 +224,18 @@ _RESPONSIBILITY_HEADINGS = {
     "ihre rolle",
     "was du machst",
     "was sie tun",
+    "was du bei uns machst",
+    "was du bei uns bewegst",
+    "was trägst du bei",
+    "was traegst du bei",
+    "dein aufgabengebiet",
+    "ihr aufgabengebiet",
+    "aufgabengebiet",
+    "tätigkeiten",
+    "taetigkeiten",
+    "aufgaben und verantwortlichkeiten",
+    "deine verantwortlichkeiten",
+    "ihre verantwortlichkeiten",
     "主要职责",
     "职位职责",
     "岗位职责",
@@ -249,6 +261,15 @@ _REQUIREMENT_HEADINGS = {
     "voraussetzungen",
     "was du mitbringst",
     "was sie mitbringen",
+    "was bringst du mit",
+    "was bringen sie mit",
+    "das bringst du mit",
+    "das bringen sie mit",
+    "qualifikationen und erfahrung",
+    "fachliche anforderungen",
+    "must have",
+    "required skills",
+    "experience and skills",
     "任职要求",
     "岗位要求",
     "资格要求",
@@ -270,6 +291,14 @@ _BENEFIT_HEADINGS = {
     "unser angebot",
     "was wir bieten",
     "wir bieten",
+    "was bieten wir dir",
+    "was bieten wir ihnen",
+    "was wir dir bieten",
+    "was wir ihnen bieten",
+    "deine benefits",
+    "ihre benefits",
+    "wir bieten dir",
+    "wir bieten ihnen",
     "福利待遇",
     "我们提供",
     "职位福利",
@@ -309,6 +338,18 @@ _KNOWN_HEADINGS = {
     "ihre rolle",
     "was du machst",
     "was sie tun",
+    "was du bei uns machst",
+    "was du bei uns bewegst",
+    "was trägst du bei",
+    "was traegst du bei",
+    "dein aufgabengebiet",
+    "ihr aufgabengebiet",
+    "aufgabengebiet",
+    "tätigkeiten",
+    "taetigkeiten",
+    "aufgaben und verantwortlichkeiten",
+    "deine verantwortlichkeiten",
+    "ihre verantwortlichkeiten",
     "anforderungen",
     "das bringen sie mit",
     "das bringst du mit",
@@ -318,11 +359,28 @@ _KNOWN_HEADINGS = {
     "voraussetzungen",
     "was du mitbringst",
     "was sie mitbringen",
+    "was bringst du mit",
+    "was bringen sie mit",
+    "das bringst du mit",
+    "das bringen sie mit",
+    "qualifikationen und erfahrung",
+    "fachliche anforderungen",
+    "must have",
+    "required skills",
+    "experience and skills",
     "darauf kannst du dich freuen",
     "leistungen",
     "unser angebot",
     "was wir bieten",
     "wir bieten",
+    "was bieten wir dir",
+    "was bieten wir ihnen",
+    "was wir dir bieten",
+    "was wir ihnen bieten",
+    "deine benefits",
+    "ihre benefits",
+    "wir bieten dir",
+    "wir bieten ihnen",
     "主要职责",
     "职位职责",
     "岗位职责",
@@ -851,6 +909,69 @@ def _employment_type(text: str) -> str:
     return "unspecified"
 
 
+_RESPONSIBILITY_CUES = re.compile(
+    r"\b("
+    r"build|develop|design|implement|manage|lead|support|maintain|create|"
+    r"analyse|analyze|coordinate|own|deliver|test|monitor|partner|collaborate|"
+    r"entwickel\w*|unterstütz\w*|erstell\w*|verantwort\w*|koordinier\w*|"
+    r"implementier\w*|betreu\w*|plan\w*|analysier\w*|test\w*|entwirf\w*|"
+    r"führ\w*|arbeit\w*"
+    r")\b",
+    re.IGNORECASE,
+)
+_REQUIREMENT_CUES = re.compile(
+    r"\b("
+    r"experience|knowledge|degree|studying|student|proficien\w*|skills?|"
+    r"ability|familiar|understanding|years?|certif\w*|license|fluent|language|"
+    r"erfahrung\w*|kenntnis\w*|studium|studier\w*|abschluss|"
+    r"programmiererfahrung|umgehen|voraussetzung\w*|anforderung\w*|"
+    r"sprach\w*|deutsch|englisch|idealerweise|von vorteil|verfüg\w*|"
+    r"mitbring\w*"
+    r")\b",
+    re.IGNORECASE,
+)
+_BENEFIT_CUES = re.compile(
+    r"\b("
+    r"benefits?|offer|salary|compensation|vacation|insurance|flexible|"
+    r"training|development|bonus|pension|wellbeing|remote|hybrid|"
+    r"vergütung|weiterbildung|betriebliche|zuschlag|urlaub|versicherung|"
+    r"mobilität|mobil\w*|kantine|zusätzlich\w*|leistungen|angebot|"
+    r"pro stunde|je stunde"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _fallback_section_items(
+    lines: list[str],
+    headings: set[str],
+    *,
+    limit: int,
+) -> list[str]:
+    if headings is _RESPONSIBILITY_HEADINGS:
+        cue = _RESPONSIBILITY_CUES
+    elif headings is _REQUIREMENT_HEADINGS:
+        cue = _REQUIREMENT_CUES
+    elif headings is _BENEFIT_HEADINGS:
+        cue = _BENEFIT_CUES
+    else:
+        return []
+
+    items: list[str] = []
+    for line in lines:
+        folded = line.casefold().rstrip(":?.")
+        if folded in _KNOWN_HEADINGS or len(line) < 12 or len(line) > 500:
+            continue
+        matched = bool(cue.search(line))
+        if headings is _REQUIREMENT_HEADINGS and not matched:
+            matched = bool(_find_skill_terms(line))
+        if matched:
+            items.append(line)
+            if len(items) == limit:
+                break
+    return items
+
+
 def _section_items(
     job_text: str,
     headings: set[str],
@@ -860,15 +981,15 @@ def _section_items(
     lines = _clean_lines(job_text)
     start: int | None = None
     for index, line in enumerate(lines):
-        if line.casefold().rstrip(":") in headings:
+        if line.casefold().rstrip(":?.") in headings:
             start = index + 1
             break
     if start is None:
-        return []
+        return _fallback_section_items(lines, headings, limit=limit)
 
     items: list[str] = []
     for line in lines[start:]:
-        folded = line.casefold().rstrip(":")
+        folded = line.casefold().rstrip(":?.")
         if folded in _KNOWN_HEADINGS:
             break
         if len(line) < 10:

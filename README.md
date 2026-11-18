@@ -127,6 +127,11 @@ available. For each missing skill it selects the nearest skills already present
 in your profile, explains the bridge, and proposes a project that extends that
 existing evidence into the missing area.
 
+The requirement extractor recognizes English, German and Chinese headings,
+including question-style headings such as `Was bringst Du mit?`. When a posting
+uses no recognizable headings, it falls back to requirement, action-verb and
+benefit cues so relevant text is still surfaced.
+
 `search --analyze --html` writes a standalone responsive report containing the
 overview, ranking table and detailed comparison cards. The report opens in
 Google Chrome automatically; add `--no-open` to write it without launching a

@@ -236,6 +236,94 @@ Wir bieten
     assert "Kubernetes" in job["missing_skills"]
 
 
+def test_question_mark_german_headings_are_recognized():
+    search = {
+        "job_ids": ["505"],
+        "references": {
+            "search_results": [
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/505/",
+                    "text": "Working Student Data Engineering",
+                }
+            ]
+        },
+    }
+    details = [
+        {
+            "sections": {
+                "job_posting": """Working Student Data Engineering
+Example Corp · Erlangen · Hybrid
+About the job
+Was trägst Du bei?
+Du entwickelst Dashboards zur Datenanalyse.
+Du unterstützt die Entwicklung von KI-Agenten.
+Was bringst Du mit?
+Du studierst Informatik und bringst Python-Erfahrung mit.
+Verhandlungssichere Deutsch- und Englischkenntnisse.
+Was bieten wir Dir?
+Hybride Arbeit und eine attraktive Vergütung.
+"""
+            }
+        }
+    ]
+
+    job = analyze_job_fit(
+        query="data",
+        search_result=search,
+        profile={"sections": {"skills": "Python\nSQL"}},
+        job_details=details,
+    )["jobs"][0]
+
+    assert job["responsibilities"][:2] == [
+        "Du entwickelst Dashboards zur Datenanalyse.",
+        "Du unterstützt die Entwicklung von KI-Agenten.",
+    ]
+    assert "Du studierst Informatik und bringst Python-Erfahrung mit." in job[
+        "requirements"
+    ]
+    assert "Hybride Arbeit und eine attraktive Vergütung." in job["benefits"]
+
+
+def test_section_cues_work_when_a_posting_has_no_section_headings():
+    search = {
+        "job_ids": ["606"],
+        "references": {
+            "search_results": [
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/606/",
+                    "text": "Data Engineer",
+                }
+            ]
+        },
+    }
+    details = [
+        {
+            "sections": {
+                "job_posting": """Data Engineer
+Example Corp · Berlin
+About the job
+Develop reliable Python data pipelines and monitor production quality.
+You have three years of experience with SQL and Python.
+We offer flexible working hours and professional training.
+"""
+            }
+        }
+    ]
+
+    job = analyze_job_fit(
+        query="data engineer",
+        search_result=search,
+        profile={"sections": {"skills": "Python\nSQL"}},
+        job_details=details,
+    )["jobs"][0]
+
+    assert any("Develop reliable" in item for item in job["responsibilities"])
+    assert any("three years" in item for item in job["requirements"])
+    assert any("flexible working" in item for item in job["benefits"])
+
+
 def test_experience_gap_generates_localized_improvement_steps():
     search = {
         "url": "https://www.linkedin.com/jobs/search/",

@@ -30,6 +30,8 @@ substantive changes are:
 - Job ranking weights required skills above responsibilities and general
   description text, and exposes separate role, domain, experience, seniority,
   language and certification score components.
+- Requirement, responsibility and benefit extraction recognizes punctuation in
+  localized headings and falls back to semantic cues when headings are absent.
 - Resume search uses shorter two-term queries and an adaptive fallback that
   relaxes optional filters only after a zero-result search, preserving company
   restrictions and reporting every fallback attempt.
