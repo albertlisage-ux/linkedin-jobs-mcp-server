@@ -1,6 +1,7 @@
 """Job-fit reports expose their evidence and keep their ranking explainable."""
 
 from linkedin_mcp_server.job_analysis import (
+    _profile_experience_years,
     analyze_job_fit,
     format_fit_report,
     render_fit_report_html,
@@ -99,6 +100,10 @@ def test_fit_report_ranks_by_observable_profile_evidence():
     assert "Build reliable pipelines with Python" in first["full_description"]
     assert first["fit_summary_i18n"]["zh"]
     assert first["fit_summary_i18n"]["de"]
+    assert first["improvement_plan"]
+    assert first["improvement_plan"][0]["skill"] == "Kubernetes"
+    assert len(first["improvement_plan"][0]["steps_i18n"]["en"]) == 4
+    assert report["improvement_roadmap"]
 
 
 def test_overview_aggregates_strengths_and_gaps():
@@ -151,6 +156,10 @@ def test_html_report_compares_overview_and_details_and_escapes_content():
     assert "完整职位描述" in rendered
     assert "Vollständige Stellenbeschreibung" in rendered
     assert "Full job description" in rendered
+    assert "Improvement roadmap" in rendered
+    assert "Verify that Kubernetes is genuinely missing" in rendered
+    assert "data-text-zh=" in rendered
+    assert "data-text-de=" in rendered
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in rendered
     assert "<script>alert" not in rendered
     assert 'aria-label="Fit score 89 out of 100"' in rendered
@@ -208,3 +217,54 @@ Wir bieten
     assert "Mehrjährige Erfahrung" in job["requirements"][0]
     assert job["benefits"] == ["Flexible Arbeitszeiten und Weiterbildung."]
     assert "Kubernetes" in job["missing_skills"]
+
+
+def test_experience_gap_generates_localized_improvement_steps():
+    search = {
+        "url": "https://www.linkedin.com/jobs/search/",
+        "job_ids": ["404"],
+        "references": {
+            "search_results": [
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/404/",
+                    "text": "Data Engineer",
+                }
+            ]
+        },
+    }
+    profile = {
+        "sections": {
+            "experience": "Data Engineer\nJanuary 2019 - December 2021",
+            "skills": "Python\nSQL",
+        }
+    }
+    details = [
+        {
+            "sections": {
+                "job_posting": """Data Engineer
+Acme · Berlin
+About the job
+Build data pipelines.
+Qualifications
+- 5+ years of experience with Python and SQL.
+"""
+            }
+        }
+    ]
+
+    report = analyze_job_fit(
+        query="data engineer",
+        search_result=search,
+        profile=profile,
+        job_details=details,
+    )
+
+    assert _profile_experience_years(profile["sections"]["experience"]) >= 2.9
+    plan = report["jobs"][0]["experience_gap_plan"]
+    assert plan is not None
+    assert plan["required_years"] == 5
+    assert plan["gap_years"] >= 2
+    assert len(plan["steps_i18n"]["en"]) == 5
+    assert len(plan["steps_i18n"]["zh"]) == 5
+    assert len(plan["steps_i18n"]["de"]) == 5

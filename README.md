@@ -108,10 +108,18 @@ details of the selected postings, and prints:
 
 - an overview with strong, good, review-worthy and stretch matches;
 - repeated strengths and recurring skill gaps;
+- an improvement roadmap prioritized by how many jobs require each gap;
+- concrete learn, build, demonstrate and interview-preparation steps;
+- experience-gap plans derived from captured profile date ranges;
 - a ranked fit score for each job with matched and missing evidence;
 - observed seniority, work mode, employment type and requested experience;
 - key requirements, responsibilities, benefits and a description snapshot;
 - expandable full job descriptions, preserving the language supplied by LinkedIn.
+
+Each detailed job also has a collapsible improvement plan. The report never
+invents experience or recommends adding unsupported skills; each skill step
+starts by verifying the gap and then builds a project that can provide real
+evidence.
 
 `search --analyze --html` writes a standalone responsive report containing the
 overview, ranking table and detailed comparison cards. The report opens in

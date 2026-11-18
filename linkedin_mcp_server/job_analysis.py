@@ -555,6 +555,220 @@ def _years_required(text: str) -> int | None:
     return min(matches) if matches else None
 
 
+_MONTHS = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "mär": 3,
+    "märz": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "mai": 5,
+    "jun": 6,
+    "june": 6,
+    "juni": 6,
+    "jul": 7,
+    "july": 7,
+    "juli": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "okt": 10,
+    "oktober": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+    "dez": 12,
+    "dezember": 12,
+}
+_MONTH_PATTERN = (
+    r"Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|März?|Apr(?:il)?|May|Mai|"
+    r"Jun(?:e)?|Juni?|Jul(?:y)?|Juli|Aug(?:ust)?|Sep(?:t(?:ember)?)?|"
+    r"Oct(?:ober)?|Okt(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Dez(?:ember)?"
+)
+_EXPERIENCE_RANGE_RE = re.compile(
+    rf"(?:(?P<start_month>{_MONTH_PATTERN})\.?\s+)?"
+    r"(?P<start_year>(?:19|20)\d{2})\s*"
+    r"(?:-|–|—|to|bis)\s*"
+    rf"(?:(?:(?P<end_month>{_MONTH_PATTERN})\.?\s+)?"
+    r"(?P<end_year>(?:19|20)\d{2})|"
+    r"(?P<current>present|current|now|heute|aktuell))",
+    re.IGNORECASE,
+)
+
+
+def _month_number(value: str | None) -> int | None:
+    if not value:
+        return None
+    return _MONTHS.get(value.rstrip(".").casefold())
+
+
+def _profile_experience_years(experience_text: str) -> float | None:
+    """Approximate non-overlapping experience from date ranges in the profile."""
+    if not experience_text:
+        return None
+    today = datetime.now().astimezone().date()
+    intervals: list[tuple[int, int]] = []
+    for match in _EXPERIENCE_RANGE_RE.finditer(experience_text):
+        start_year = int(match.group("start_year"))
+        start_month = _month_number(match.group("start_month")) or 1
+        if match.group("current"):
+            end_year, end_month = today.year, today.month
+        else:
+            end_year = int(match.group("end_year"))
+            end_month = _month_number(match.group("end_month")) or 12
+        start = start_year * 12 + start_month - 1
+        end = end_year * 12 + end_month
+        if end > start:
+            intervals.append((start, end))
+    if not intervals:
+        return None
+
+    intervals.sort()
+    merged: list[list[int]] = []
+    for start, end in intervals:
+        if not merged or start > merged[-1][1]:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+    months = sum(end - start for start, end in merged)
+    return round(months / 12, 1) if months else None
+
+
+def _priority_for_gap(count: int, total_jobs: int) -> str:
+    if count >= max(2, (total_jobs + 1) // 2):
+        return "high"
+    if count >= 2:
+        return "medium"
+    return "low"
+
+
+def _skill_improvement_steps(skill: str) -> dict[str, list[str]]:
+    return {
+        "en": [
+            (
+                f"Verify that {skill} is genuinely missing, then review its "
+                "official documentation or one reputable structured guide."
+            ),
+            (
+                f"Build a small project that uses {skill}; publish the code "
+                "with a concise README explaining the decisions and results."
+            ),
+            (
+                f"Add {skill} to your resume or LinkedIn profile only when you "
+                "can support it with a concrete project and measurable outcome."
+            ),
+            (
+                f"Prepare a two-minute explanation of a trade-off or problem "
+                f"you solved with {skill} for interviews."
+            ),
+        ],
+        "zh": [
+            (
+                f"先确认 {skill} 是否确实缺失，然后阅读官方文档或一份可靠的系统教程。"
+            ),
+            (
+                f"完成一个使用 {skill} 的小项目，公开代码并附上简短 README，"
+                "说明技术选择与结果。"
+            ),
+            (
+                f"只有在拥有具体项目和可量化成果后，才把 {skill} 写入简历或 LinkedIn 档案。"
+            ),
+            f"准备一段两分钟说明，讲清你使用 {skill} 解决的权衡或实际问题，用于面试。",
+        ],
+        "de": [
+            (
+                f"Prüfe, ob {skill} wirklich fehlt, und arbeite anschließend die "
+                "offizielle Dokumentation oder einen seriösen strukturierten Leitfaden durch."
+            ),
+            (
+                f"Baue ein kleines Projekt mit {skill}, veröffentliche den Code "
+                "und dokumentiere Entscheidungen und Ergebnisse in einer kurzen README."
+            ),
+            (
+                f"Nimm {skill} erst dann in Lebenslauf oder LinkedIn-Profil auf, "
+                "wenn ein konkretes Projekt und ein messbares Ergebnis vorliegen."
+            ),
+            (
+                f"Bereite für Vorstellungsgespräche eine zweiminütige Erklärung "
+                f"zu einem Trade-off oder Problem mit {skill} vor."
+            ),
+        ],
+    }
+
+
+def _experience_improvement_steps(
+    required: int,
+    current: float | None,
+) -> dict[str, list[str]]:
+    current_text = f"{current:g}" if current is not None else "unknown"
+    return {
+        "en": [
+            (
+                f"Compare the posting's {required}+ years with your captured "
+                f"{current_text} years and list the duties that lack evidence."
+            ),
+            (
+                "Turn existing work into measurable case studies: scope, "
+                "decisions, technical challenge, result and business impact."
+            ),
+            (
+                "Create one or two end-to-end projects that exercise the "
+                "missing responsibilities rather than only completing tutorials."
+            ),
+            (
+                "Seek a stretch assignment, freelance task, open-source "
+                "contribution or volunteer project that produces verifiable experience."
+            ),
+            (
+                "Apply to adjacent or slightly less senior variants while the "
+                "experience gap narrows; never overstate years or responsibilities."
+            ),
+        ],
+        "zh": [
+            (
+                f"对比职位要求的 {required}+ 年经验与你档案中的 {current_text} 年，"
+                "列出缺少证据的职责。"
+            ),
+            "把已有工作整理成可量化案例：范围、关键决策、技术难点、结果和业务影响。",
+            "完成一到两个端到端项目，重点覆盖缺失的职责，而不是只做教程练习。",
+            "争取延伸任务、自由职业项目、开源贡献或志愿项目，形成可验证的经验。",
+            "在经验差距缩小前，投递相邻职位或资历要求略低的岗位；不要夸大年限或职责。",
+        ],
+        "de": [
+            (
+                f"Vergleiche die geforderten {required}+ Jahre mit den erfassten "
+                f"{current_text} Jahren und notiere Aufgaben ohne Nachweis."
+            ),
+            (
+                "Forme vorhandene Arbeit in messbare Fallstudien um: Umfang, "
+                "Entscheidungen, technische Herausforderung, Ergebnis und Geschäftswirkung."
+            ),
+            (
+                "Erstelle ein oder zwei End-to-End-Projekte, die die fehlenden "
+                "Aufgaben abdecken, statt nur Tutorials abzuschließen."
+            ),
+            (
+                "Suche eine anspruchsvollere Aufgabe, einen Freelance-Auftrag, "
+                "Open-Source-Beitrag oder ein Ehrenamt mit nachweisbarer Erfahrung."
+            ),
+            (
+                "Bewirb dich auf angrenzende oder etwas weniger seniorige Rollen, "
+                "während die Lücke schrumpft; übertreibe Jahre oder Aufgaben nicht."
+            ),
+        ],
+    }
+
+
 def _rating(score: int) -> tuple[str, str]:
     if score >= 70:
         return "strong_match", "Strong match"
@@ -596,6 +810,7 @@ def _analyze_one_job(
     profile_skill_lines: list[str],
     profile_level: int | None,
     profile_level_name: str,
+    profile_years: float | None,
 ) -> dict[str, Any]:
     section = details.get("sections", {}).get("job_posting", "")
     job_text = str(section or "")
@@ -624,6 +839,12 @@ def _analyze_one_job(
     score = max(0, min(100, score))
     rating_key, rating = _rating(score)
     company, location, _ = _header_parts(job_text, title)
+    years_required = _years_required(job_text)
+    experience_gap_years = (
+        round(max(0.0, years_required - profile_years), 1)
+        if years_required is not None and profile_years is not None
+        else None
+    )
 
     section_errors = details.get("section_errors")
     error_message = None
@@ -657,7 +878,8 @@ def _analyze_one_job(
         "seniority_alignment": round(seniority_fit, 2),
         "work_mode": _work_mode(job_text[:2000]),
         "employment_type": _employment_type(job_text[:2000]),
-        "years_required": _years_required(job_text),
+        "years_required": years_required,
+        "experience_gap_years": experience_gap_years,
         "responsibilities": _section_items(
             job_text, _RESPONSIBILITY_HEADINGS, limit=20
         ),
@@ -703,6 +925,7 @@ def analyze_job_fit(
         else ""
     )
     profile_level_name, profile_level = _detect_level(profile_level_text)
+    profile_years = _profile_experience_years(profile_level_text)
 
     jobs: list[dict[str, Any]] = []
     for index, entry in enumerate(selected):
@@ -716,6 +939,7 @@ def analyze_job_fit(
                 profile_skill_lines=profile_skill_lines,
                 profile_level=profile_level,
                 profile_level_name=profile_level_name,
+                profile_years=profile_years,
             )
         )
     jobs.sort(key=lambda item: (-item["fit_score"], item["title"].casefold()))
@@ -725,12 +949,52 @@ def analyze_job_fit(
     )
     gap_counts = Counter(skill for job in jobs for skill in job["missing_skills"])
     rating_counts = Counter(job["fit_rating_key"] for job in jobs)
+    all_gap_plans = [
+        {
+            "skill": skill,
+            "jobs": count,
+            "priority": _priority_for_gap(count, len(jobs)),
+            "steps_i18n": _skill_improvement_steps(skill),
+        }
+        for skill, count in gap_counts.most_common()
+    ]
+    improvement_roadmap = all_gap_plans[:8]
+    plan_by_skill = {item["skill"]: item for item in all_gap_plans}
+    experience_gap_jobs = 0
+    for job in jobs:
+        job["improvement_plan"] = [
+            plan_by_skill[skill]
+            for skill in job["missing_skills"]
+            if skill in plan_by_skill
+        ][:10]
+        gap = job.get("experience_gap_years")
+        if gap:
+            experience_gap_jobs += 1
+            job["experience_gap_plan"] = {
+                "required_years": job["years_required"],
+                "profile_years": profile_years,
+                "gap_years": gap,
+                "steps_i18n": _experience_improvement_steps(
+                    job["years_required"],
+                    profile_years,
+                ),
+            }
+        else:
+            job["experience_gap_plan"] = None
+        job["readiness"] = (
+            "ready"
+            if not job["missing_skills"] and not gap
+            else "near_ready"
+            if job["fit_score"] >= 55
+            else "needs_development"
+        )
     return {
         "query": query,
         "profile_url": profile.get("url"),
         "profile_sections_read": sorted(sections) if isinstance(sections, dict) else [],
         "profile_skills_detected": sorted(profile_skills, key=str.casefold),
         "profile_level": profile_level_name,
+        "profile_years_experience": profile_years,
         "jobs_returned": len(entries),
         "jobs_analyzed": len(jobs),
         "rating_counts": {
@@ -744,9 +1008,15 @@ def analyze_job_fit(
             for skill, count in strength_counts.most_common(8)
         ],
         "common_gaps": [
-            {"skill": skill, "jobs": count}
-            for skill, count in gap_counts.most_common(8)
+            {
+                "skill": item["skill"],
+                "jobs": item["jobs"],
+                "priority": item["priority"],
+            }
+            for item in improvement_roadmap
         ],
+        "improvement_roadmap": improvement_roadmap,
+        "experience_gap_jobs": experience_gap_jobs,
         "jobs": jobs,
         "methodology": (
             "Fit is a heuristic based on skill evidence found in the captured "
@@ -785,6 +1055,15 @@ def format_fit_report(report: dict[str, Any]) -> str:
         lines.append(f"Most repeated strengths: {strengths}")
     if gaps:
         lines.append(f"Most repeated gaps: {gaps}")
+    roadmap = report.get("improvement_roadmap", [])
+    if roadmap:
+        lines.append(
+            "Top improvement priorities: "
+            + ", ".join(
+                f'{item["skill"]} ({item["priority"]})'
+                for item in roadmap[:6]
+            )
+        )
     lines.extend(("", "METHODOLOGY", report["methodology"]))
 
     for position, job in enumerate(report["jobs"], start=1):
@@ -825,6 +1104,28 @@ def format_fit_report(report: dict[str, Any]) -> str:
             lines.append(
                 f'Not found in profile: {", ".join(shown)}{suffix}'
             )
+        if job.get("experience_gap_plan"):
+            plan = job["experience_gap_plan"]
+            lines.append(
+                f'Experience gap: about {plan["gap_years"]:g} years '
+                f'({plan["profile_years"]:g} captured vs '
+                f'{plan["required_years"]}+ requested).'
+            )
+            lines.append("Experience improvement steps:")
+            lines.extend(
+                f"{index}. {step}"
+                for index, step in enumerate(plan["steps_i18n"]["en"], start=1)
+            )
+        if job.get("improvement_plan"):
+            lines.append("Skill improvement steps:")
+            for plan in job["improvement_plan"][:4]:
+                lines.append(f'- {plan["skill"]} ({plan["priority"]} priority)')
+                lines.extend(
+                    f"  {index}. {step}"
+                    for index, step in enumerate(
+                        plan["steps_i18n"]["en"], start=1
+                    )
+                )
         if job["requirements"]:
             lines.append("Key requirements:")
             lines.extend(f"- {item}" for item in job["requirements"])
@@ -864,6 +1165,27 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "overview.gaps": "Repeated gaps",
         "overview.no_strengths": "No repeated skill matches",
         "overview.no_gaps": "No repeated skill gaps",
+        "improvement.title": "Improvement roadmap",
+        "improvement.subtitle": (
+            "Focus on the gaps that unlock the most jobs. Each path moves from "
+            "learning to evidence you can demonstrate."
+        ),
+        "improvement.skill_focus": "Appears in {count} analysed jobs",
+        "improvement.experience_title": "Experience gap plan",
+        "improvement.experience_summary": (
+            "{current} years captured vs {required}+ requested; "
+            "approximately {gap} years to close."
+        ),
+        "improvement.for_role": "How to improve for this role",
+        "improvement.profile_years": "Profile experience",
+        "improvement.required_years": "Posting requirement",
+        "improvement.no_gaps": "No missing skills detected in this analysis.",
+        "priority.high": "High priority",
+        "priority.medium": "Medium priority",
+        "priority.low": "Low priority",
+        "readiness.ready": "Evidence complete",
+        "readiness.near_ready": "Close with targeted evidence",
+        "readiness.needs_development": "Development path recommended",
         "comparison.title": "Job comparison",
         "comparison.caption": "Ranked from strongest to weakest evidence match.",
         "table.job": "Job",
@@ -976,6 +1298,24 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "overview.gaps": "重复出现的差距",
         "overview.no_strengths": "没有重复匹配的技能",
         "overview.no_gaps": "没有重复出现的技能差距",
+        "improvement.title": "提升路线图",
+        "improvement.subtitle": "优先补齐能解锁最多职位的差距。每条路径都从学习开始，最终形成可展示的证据。",
+        "improvement.skill_focus": "出现在 {count} 个已分析职位中",
+        "improvement.experience_title": "经验差距计划",
+        "improvement.experience_summary": (
+            "档案约 {current} 年，职位要求 {required}+ 年；"
+            "还需补足约 {gap} 年。"
+        ),
+        "improvement.for_role": "如何为该职位提升",
+        "improvement.profile_years": "档案经验",
+        "improvement.required_years": "职位要求",
+        "improvement.no_gaps": "本次分析未检测到缺失技能。",
+        "priority.high": "高优先级",
+        "priority.medium": "中优先级",
+        "priority.low": "低优先级",
+        "readiness.ready": "证据完整",
+        "readiness.near_ready": "补充针对性证据即可",
+        "readiness.needs_development": "建议制定提升计划",
         "comparison.title": "职位对比",
         "comparison.caption": "按证据匹配度从高到低排序。",
         "table.job": "职位",
@@ -1083,6 +1423,27 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "overview.gaps": "Wiederkehrende Lücken",
         "overview.no_strengths": "Keine wiederkehrenden Kompetenztreffer",
         "overview.no_gaps": "Keine wiederkehrenden Kompetenzlücken",
+        "improvement.title": "Entwicklungsplan",
+        "improvement.subtitle": (
+            "Konzentriere dich auf die Lücken, die die meisten Stellen öffnen. "
+            "Jeder Pfad führt vom Lernen zu nachweisbarer Evidenz."
+        ),
+        "improvement.skill_focus": "Kommt in {count} analysierten Stellen vor",
+        "improvement.experience_title": "Plan für die Erfahrungslücke",
+        "improvement.experience_summary": (
+            "{current} Jahre erfasst gegenüber {required}+ gefordert; "
+            "etwa {gap} Jahre Lücke."
+        ),
+        "improvement.for_role": "So verbesserst du dich für diese Stelle",
+        "improvement.profile_years": "Erfahrung im Profil",
+        "improvement.required_years": "Anforderung der Stelle",
+        "improvement.no_gaps": "In dieser Analyse wurden keine fehlenden Kompetenzen erkannt.",
+        "priority.high": "Hohe Priorität",
+        "priority.medium": "Mittlere Priorität",
+        "priority.low": "Niedrige Priorität",
+        "readiness.ready": "Nachweise vollständig",
+        "readiness.near_ready": "Mit gezielten Nachweisen schließbar",
+        "readiness.needs_development": "Entwicklungsplan empfohlen",
         "comparison.title": "Stellenvergleich",
         "comparison.caption": (
             "Sortiert von der stärksten zur schwächsten Evidenzübereinstimmung."
@@ -1363,6 +1724,57 @@ h4 { margin: 24px 0 8px; font-size: 0.95rem; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
+.roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.roadmap-card {
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.roadmap-card.full { grid-column: 1 / -1; }
+.roadmap-card h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.roadmap-card ol,
+.improvement-details ol {
+  margin: 12px 0 0;
+  padding-left: 1.3rem;
+}
+.roadmap-card li + li,
+.improvement-details li + li { margin-top: 9px; }
+.priority {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: 600 0.74rem/1.2 "Fira Code", ui-monospace, monospace;
+}
+.priority.high { color: var(--stretch); background: var(--stretch-soft); }
+.priority.medium { color: var(--review); background: var(--review-soft); }
+.priority.low { color: var(--good); background: var(--good-soft); }
+.improvement-details {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-raised);
+}
+.improvement-details summary {
+  min-height: 32px;
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 600;
+}
 .panel {
   padding: 22px;
   background: var(--surface);
@@ -1538,7 +1950,7 @@ html:lang(zh-CN) .language-switcher button {
 }
 @media (max-width: 800px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .signals, .job-body { grid-template-columns: 1fr; }
+  .signals, .roadmap-grid, .job-body { grid-template-columns: 1fr; }
   .job-head { grid-template-columns: 1fr; }
   .job-body > .full { grid-column: auto; }
 }
@@ -1626,6 +2038,23 @@ def _list_html(items: list[str], empty_key: str) -> str:
     if not items:
         return f'<p class="snapshot">{_i18n_span(empty_key)}</p>'
     return "<ul>" + "".join(f"<li>{_e(item)}</li>" for item in items) + "</ul>"
+
+
+def _steps_html(steps_i18n: dict[str, list[str]]) -> str:
+    english = steps_i18n.get("en", [])
+    chinese = steps_i18n.get("zh", [])
+    german = steps_i18n.get("de", [])
+    items: list[str] = []
+    for index, english_step in enumerate(english):
+        chinese_step = chinese[index] if index < len(chinese) else english_step
+        german_step = german[index] if index < len(german) else english_step
+        items.append(
+            f'<li data-text-en="{_e(english_step)}" '
+            f'data-text-zh="{_e(chinese_step)}" '
+            f'data-text-de="{_e(german_step)}">'
+            f"{_e(english_step)}</li>"
+        )
+    return "<ol>" + "".join(items) + "</ol>"
 
 
 def render_fit_report_html(
@@ -1727,6 +2156,64 @@ def render_fit_report_html(
             if full_description
             else ""
         )
+        improvement_parts: list[str] = []
+        experience_plan = job.get("experience_gap_plan")
+        if experience_plan:
+            summary_by_language = {
+                language: _REPORT_TRANSLATIONS[language][
+                    "improvement.experience_summary"
+                ].format(
+                    current=f'{experience_plan["profile_years"]:g}',
+                    required=experience_plan["required_years"],
+                    gap=f'{experience_plan["gap_years"]:g}',
+                )
+                for language in ("en", "zh", "de")
+            }
+            improvement_parts.append(
+                f"""
+                <h4 data-i18n="improvement.experience_title">
+                  {_e(_i18n_text("improvement.experience_title"))}
+                </h4>
+                <p class="snapshot"
+                   data-text-en="{_e(summary_by_language["en"])}"
+                   data-text-zh="{_e(summary_by_language["zh"])}"
+                   data-text-de="{_e(summary_by_language["de"])}">
+                  {_e(summary_by_language["en"])}
+                </p>
+                {_steps_html(experience_plan["steps_i18n"])}
+                """
+            )
+        for plan in job.get("improvement_plan", []):
+            improvement_parts.append(
+                f"""
+                <h4>
+                  {_e(plan["skill"])}
+                  <span class="priority {_e(plan["priority"])}" data-i18n="priority.{_e(plan["priority"])}">
+                    {_e(_i18n_text(f"priority.{plan['priority']}"))}
+                  </span>
+                </h4>
+                {_steps_html(plan["steps_i18n"])}
+                """
+            )
+        improvement_html = (
+            f"""
+            <details class="improvement-details">
+              <summary data-i18n="improvement.for_role">
+                {_e(_i18n_text("improvement.for_role"))}
+              </summary>
+              {''.join(improvement_parts)}
+            </details>
+            """
+            if improvement_parts
+            else f'<p class="snapshot">{_i18n_span("improvement.no_gaps")}</p>'
+        )
+        readiness_class = (
+            "strong_match"
+            if job["readiness"] == "ready"
+            else "possible_match"
+            if job["readiness"] == "near_ready"
+            else "stretch"
+        )
         job_cards.append(
             f"""
             <article class="job-card" id="job-{_e(job['job_id'])}">
@@ -1771,6 +2258,9 @@ def render_fit_report_html(
                       {_e(_i18n_text("details.confidence"))}
                     </span>
                   </p>
+                  <span class="badge {_e(readiness_class)}" data-i18n="readiness.{_e(job['readiness'])}">
+                    {_e(_i18n_text(f"readiness.{job['readiness']}"))}
+                  </span>
                 </div>
               </header>
               <div class="job-body">
@@ -1806,6 +2296,7 @@ def render_fit_report_html(
                   {snapshot}
                   {full_description_html}
                   {warning}
+                  {improvement_html}
                   <p>
                     <a class="button" href="{_safe_href(job['url'])}" data-i18n="details.view_full">
                       {_e(_i18n_text("details.view_full"))}
@@ -1832,6 +2323,64 @@ def render_fit_report_html(
         f'data-count="{_e(item["jobs"])}">{_e(item["jobs"])} jobs</span>'
         f"</span>"
         for item in report.get("common_gaps", [])
+    )
+    roadmap_cards = "".join(
+        f"""
+        <article class="roadmap-card">
+          <h3>
+            <span>{_e(item["skill"])}</span>
+            <span class="priority {_e(item["priority"])}" data-i18n="priority.{_e(item["priority"])}">
+              {_e(_i18n_text(f"priority.{item['priority']}"))}
+            </span>
+          </h3>
+          <p class="job-meta">
+            <span data-i18n-template="common.jobs_count" data-count="{_e(item["jobs"])}">
+              {_e(_i18n_text("common.jobs_count").format(count=item["jobs"]))}
+            </span>
+          </p>
+          {_steps_html(item["steps_i18n"])}
+        </article>
+        """
+        for item in report.get("improvement_roadmap", [])
+    )
+    experience_jobs = [
+        job for job in report["jobs"] if job.get("experience_gap_plan")
+    ]
+    experience_block = ""
+    if experience_jobs:
+        experience_job = max(
+            experience_jobs,
+            key=lambda job: job["experience_gap_plan"]["gap_years"],
+        )
+        experience_plan = experience_job["experience_gap_plan"]
+        experience_summary = {
+            language: _REPORT_TRANSLATIONS[language][
+                "improvement.experience_summary"
+            ].format(
+                current=f'{experience_plan["profile_years"]:g}',
+                required=experience_plan["required_years"],
+                gap=f'{experience_plan["gap_years"]:g}',
+            )
+            for language in ("en", "zh", "de")
+        }
+        experience_block = f"""
+        <article class="roadmap-card full">
+          <h3 data-i18n="improvement.experience_title">
+            {_e(_i18n_text("improvement.experience_title"))}
+          </h3>
+          <p class="snapshot"
+             data-text-en="{_e(experience_summary["en"])}"
+             data-text-zh="{_e(experience_summary["zh"])}"
+             data-text-de="{_e(experience_summary["de"])}">
+            {_e(experience_summary["en"])}
+          </p>
+          {_steps_html(experience_plan["steps_i18n"])}
+        </article>
+        """
+    roadmap_content = (
+        f"{roadmap_cards}{experience_block}"
+        if roadmap_cards or experience_block
+        else f'<p class="panel">{_i18n_span("improvement.no_gaps")}</p>'
     )
     profile_link = (
         f'<a href="{profile_url}">{profile_label}</a>'
@@ -1898,6 +2447,14 @@ def render_fit_report_html(
       </div>
     </section>
 
+    <section class="section" aria-labelledby="improvement-heading">
+      <h2 id="improvement-heading" data-i18n="improvement.title">
+        {_e(_i18n_text("improvement.title"))}
+      </h2>
+      <p data-i18n="improvement.subtitle">{_e(_i18n_text("improvement.subtitle"))}</p>
+      <div class="roadmap-grid">{roadmap_content}</div>
+    </section>
+
     <section class="section" aria-labelledby="comparison-heading">
       <h2 id="comparison-heading" data-i18n="comparison.title">{_e(_i18n_text("comparison.title"))}</h2>
       <div class="table-wrap">
@@ -1961,6 +2518,11 @@ def render_fit_report_html(
         element.textContent = element.dataset[
           language === "zh" ? "summaryZh" : language === "de" ? "summaryDe" : "summaryEn"
         ] || element.dataset.summaryEn;
+      }});
+      document.querySelectorAll("[data-text-en]").forEach((element) => {{
+        element.textContent = element.dataset[
+          language === "zh" ? "textZh" : language === "de" ? "textDe" : "textEn"
+        ] || element.dataset.textEn;
       }});
       const titleTemplate = dictionary["app.title_template"];
       const title = titleTemplate.replace("{{query}}", reportQuery);
