@@ -152,6 +152,26 @@ linkedin-jobs-mcp analyze "platform engineer" \
   --limit 5
 ```
 
+Search using only the resume, with no job title or exact-title filter:
+
+```bash
+linkedin-jobs-mcp search \
+  --resume ~/resume.txt \
+  --resume-search \
+  --resume-queries 3 \
+  --location Berlin \
+  --remote \
+  --this-week \
+  --limit 5 \
+  --language zh \
+  --html linkedin-jobs-report.html
+```
+
+`--resume-search` detects and ranks skills and domain signals from the resume,
+generates up to five complementary queries, runs them through LinkedIn, removes
+duplicate jobs and analyzes the merged result. The report records the resume
+signals and every query used, so the search remains explainable.
+
 Use `--json` for the complete structured analysis. If you do not want to read
 the default `experience,skills` sections, adjust them with
 `--profile-sections`.

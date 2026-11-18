@@ -335,3 +335,88 @@ def test_search_rejects_out_of_range_pages(pages):
         direct_cli.main(["search", "python", "--pages", pages])
 
     assert raised.value.code == 2
+
+
+def test_resume_search_requires_a_resume_file():
+    with pytest.raises(SystemExit) as raised:
+        direct_cli.main(["search", "--resume-search"])
+
+    assert raised.value.code == 2
+
+
+def test_resume_search_does_not_require_a_job_title(
+    monkeypatch, capsys, tmp_path
+):
+    config = SimpleNamespace(
+        server=SimpleNamespace(tool_timeout_seconds=30.0),
+    )
+    monkeypatch.setattr(direct_cli, "_configure", lambda args: config)
+    resume = tmp_path / "resume.txt"
+    resume.write_text("Python SQL Databricks analytics", encoding="utf-8")
+    report_path = tmp_path / "resume-report.html"
+
+    async def fake_analysis(args, query, *, tool_timeout):
+        assert query is None
+        assert args.resume_search is True
+        search = {
+            "url": "resume-search",
+            "job_ids": ["101"],
+            "search_mode": "resume",
+            "search_queries": ["Python SQL Databricks"],
+            "resume_search_signals": {
+                "skills": ["Python", "SQL", "Databricks"],
+                "domains": ["data"],
+                "query_specs": [],
+            },
+            "references": {
+                "search_results": [
+                    {
+                        "kind": "job",
+                        "url": "/jobs/view/101/",
+                        "text": "Data Engineer",
+                        "search_query": "Python SQL Databricks",
+                    }
+                ]
+            },
+        }
+        profile = {
+            "url": str(resume),
+            "sections": {
+                "profile_document": resume.read_text(encoding="utf-8")
+            },
+        }
+        details = [
+            {
+                "sections": {
+                    "job_posting": (
+                        "Data Engineer\nAcme · Berlin\nAbout the job\n"
+                        "Build pipelines with Python and SQL."
+                    )
+                }
+            }
+        ]
+        return search, profile, details
+
+    monkeypatch.setattr(direct_cli, "_collect_analysis", fake_analysis)
+    monkeypatch.setattr(direct_cli, "_open_html_report", lambda path: "Chrome")
+
+    assert (
+        direct_cli.main(
+            [
+                "search",
+                "--resume",
+                str(resume),
+                "--resume-search",
+                "--limit",
+                "1",
+                "--html",
+                str(report_path),
+            ]
+        )
+        == 0
+    )
+
+    output = capsys.readouterr().out
+    assert "resume-based skills" in output
+    assert "Python SQL Databricks" in output
+    assert report_path.exists()

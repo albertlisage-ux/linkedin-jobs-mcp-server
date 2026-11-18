@@ -4,6 +4,8 @@ from linkedin_mcp_server.job_analysis import (
     _profile_experience_years,
     analyze_job_fit,
     format_fit_report,
+    generate_resume_search_queries,
+    merge_job_search_results,
     render_fit_report_html,
 )
 
@@ -277,3 +279,76 @@ Qualifications
     assert len(plan["steps_i18n"]["en"]) == 5
     assert len(plan["steps_i18n"]["zh"]) == 5
     assert len(plan["steps_i18n"]["de"]) == 5
+
+
+def test_resume_search_uses_skills_without_requiring_a_job_title():
+    resume = """Alex Example
+Data and cloud professional
+Experience
+Python Python SQL Databricks Spark AWS
+Built analytics pipelines and data products.
+"""
+
+    context = generate_resume_search_queries(resume, limit=3)
+    queries = [item["query"] for item in context["queries"]]
+
+    assert len(queries) == 3
+    assert queries[0].startswith("Python")
+    assert any("SQL" in query for query in queries)
+    assert "Senior Data Engineer" not in queries
+    assert {"Python", "SQL", "Databricks"} <= set(context["skills"])
+    assert context["domains"]
+
+
+def test_resume_search_results_are_merged_and_remember_their_query():
+    first = {
+        "job_ids": ["101", "202"],
+        "references": {
+            "search_results": [
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/101/",
+                    "text": "Data Engineer",
+                },
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/202/",
+                    "text": "Analytics Engineer",
+                },
+            ]
+        },
+        "sections": {"search_results": "first results"},
+    }
+    second = {
+        "job_ids": ["202", "303"],
+        "references": {
+            "search_results": [
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/202/",
+                    "text": "Analytics Engineer",
+                },
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/303/",
+                    "text": "Cloud Data Engineer",
+                },
+            ]
+        },
+        "sections": {"search_results": "second results"},
+        "promoted_job_ids": ["303"],
+    }
+    specs = [{"query": "Python SQL"}, {"query": "Databricks AWS"}]
+
+    merged = merge_job_search_results([first, second], specs)
+
+    assert merged["job_ids"] == ["101", "202", "303"]
+    assert merged["search_queries"] == ["Python SQL", "Databricks AWS"]
+    assert merged["promoted_job_ids"] == ["303"]
+    references = {
+        item["url"]: item["search_query"]
+        for item in merged["references"]["search_results"]
+    }
+    assert references["/jobs/view/101/"] == "Python SQL"
+    assert references["/jobs/view/202/"] == "Python SQL"
+    assert references["/jobs/view/303/"] == "Databricks AWS"

@@ -192,6 +192,27 @@ def _add_profile_analysis_options(parser: argparse.ArgumentParser) -> None:
         help="Use a UTF-8 resume or profile text file instead of LinkedIn profile.",
     )
     parser.add_argument(
+        "--resume",
+        dest="profile_file",
+        metavar="PATH",
+        help="Alias for --profile-file.",
+    )
+    parser.add_argument(
+        "--resume-search",
+        action="store_true",
+        help=(
+            "Generate several skill-based searches from the resume instead of "
+            "requiring or filtering by a job title."
+        ),
+    )
+    parser.add_argument(
+        "--resume-queries",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Number of resume-derived queries to run, 1-5 (default: 3).",
+    )
+    parser.add_argument(
         "--profile-sections",
         default="experience,skills",
         metavar="LIST",
@@ -422,6 +443,8 @@ def _job_entries(data: dict[str, Any]) -> list[dict[str, str]]:
             "url": _absolute_linkedin_url(url),
             "title": str(raw.get("text") or f"LinkedIn job {job_id}"),
         }
+        if raw.get("search_query"):
+            entry["search_query"] = str(raw["search_query"])
         ordered.append(entry)
         by_id[job_id] = entry
 
@@ -656,24 +679,69 @@ def _write_and_open_report(
 
 async def _collect_analysis(
     args: argparse.Namespace,
-    query: str,
+    query: str | None,
     *,
     tool_timeout: float,
 ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Read search, profile and selected postings through one browser session."""
     from fastmcp import Client
 
+    from linkedin_mcp_server.job_analysis import (
+        generate_resume_search_queries,
+        merge_job_search_results,
+    )
     from linkedin_mcp_server.server import create_mcp_server
 
     profile = _profile_document(args.profile_file) if args.profile_file else None
     toolset = "jobs" if profile is not None else "full"
     server = create_mcp_server(tool_timeout=tool_timeout, toolset=toolset)
     async with Client(server) as client:
-        search_result = _structured_result(
-            await client.call_tool(
-                "search_jobs", _search_arguments(args, query)
+        if args.resume_search:
+            if profile is None:
+                raise DirectCommandError(
+                    "--resume-search requires --resume or --profile-file."
+                )
+            resume_text = str(
+                profile.get("sections", {}).get("profile_document", "")
             )
-        )
+            search_context = generate_resume_search_queries(
+                resume_text,
+                limit=args.resume_queries,
+            )
+            if not search_context["queries"]:
+                raise DirectCommandError(
+                    "Could not derive search queries from the resume."
+                )
+            query_specs = search_context["queries"]
+            search_results = []
+            for query_spec in query_specs:
+                search_results.append(
+                    _structured_result(
+                        await client.call_tool(
+                            "search_jobs",
+                            _search_arguments(args, query_spec["query"]),
+                        )
+                    )
+                )
+            search_result = merge_job_search_results(
+                search_results,
+                query_specs,
+            )
+            search_result["search_mode"] = "resume"
+            search_result["resume_search_signals"] = {
+                "skills": search_context["skills"],
+                "domains": search_context["domains"],
+                "query_specs": query_specs,
+            }
+        else:
+            if not query:
+                raise DirectCommandError("A search query is required.")
+            search_result = _structured_result(
+                await client.call_tool(
+                    "search_jobs", _search_arguments(args, query)
+                )
+            )
+
         entries = _job_entries(search_result)
         selected = entries if args.limit == 0 else entries[: args.limit]
 
@@ -714,10 +782,12 @@ async def _collect_analysis(
 async def _execute(args: argparse.Namespace) -> int:
     tool_timeout = args.tool_timeout or 180.0
     if args.command == "search":
-        query = args.query or input("Search LinkedIn jobs: ").strip()
-        if not query:
+        query = args.query
+        if not query and not args.resume_search:
+            query = input("Search LinkedIn jobs: ").strip()
+        if not query and not args.resume_search:
             raise DirectCommandError("A search query is required.")
-        if args.analyze or args.html:
+        if args.analyze or args.html or args.resume_search:
             from linkedin_mcp_server.job_analysis import (
                 analyze_job_fit,
                 format_fit_report,
@@ -729,7 +799,7 @@ async def _execute(args: argparse.Namespace) -> int:
                 tool_timeout=tool_timeout,
             )
             report = analyze_job_fit(
-                query=query,
+                query=query or "Resume-based search",
                 search_result=search_result,
                 profile=profile,
                 job_details=details,
@@ -767,8 +837,10 @@ async def _execute(args: argparse.Namespace) -> int:
             format_fit_report,
         )
 
-        query = args.query or input("Search LinkedIn jobs to analyze: ").strip()
-        if not query:
+        query = args.query
+        if not query and not args.resume_search:
+            query = input("Search LinkedIn jobs to analyze: ").strip()
+        if not query and not args.resume_search:
             raise DirectCommandError("A search query is required.")
         search_result, profile, details = await _collect_analysis(
             args,
@@ -776,7 +848,7 @@ async def _execute(args: argparse.Namespace) -> int:
             tool_timeout=tool_timeout,
         )
         report = analyze_job_fit(
-            query=query,
+            query=query or "Resume-based search",
             search_result=search_result,
             profile=profile,
             job_details=details,
@@ -852,6 +924,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         and not 1 <= args.profile_scrolls <= 50
     ):
         parser.error("--profile-scrolls must be between 1 and 50")
+    if getattr(args, "resume_queries", None) is not None and not (
+        1 <= args.resume_queries <= 5
+    ):
+        parser.error("--resume-queries must be between 1 and 5")
+    if getattr(args, "resume_search", False) and not args.profile_file:
+        parser.error("--resume-search requires --resume or --profile-file")
 
     try:
         config = _configure(args)

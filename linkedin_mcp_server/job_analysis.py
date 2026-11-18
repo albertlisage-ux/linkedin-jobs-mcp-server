@@ -195,6 +195,21 @@ _SKILL_NOISE = {
     "view",
 }
 
+_DOMAIN_SIGNALS: dict[str, tuple[str, ...]] = {
+    "data": ("data", "analytics", "pipeline", "etl", "warehouse"),
+    "machine learning": ("machine learning", "artificial intelligence", "ai"),
+    "cloud": ("cloud", "aws", "azure", "gcp"),
+    "software": ("software", "application", "backend", "frontend"),
+    "devops": ("devops", "platform", "infrastructure", "reliability"),
+    "product": ("product", "roadmap", "customer"),
+    "design": ("design", "user experience", "prototype"),
+    "security": ("security", "cybersecurity", "compliance"),
+    "finance": ("finance", "financial", "accounting"),
+    "marketing": ("marketing", "brand", "campaign"),
+    "sales": ("sales", "revenue", "account management"),
+    "healthcare": ("healthcare", "clinical", "medical"),
+}
+
 _RESPONSIBILITY_HEADINGS = {
     "responsibilities",
     "the role",
@@ -340,6 +355,184 @@ def _find_skill_terms(text: str) -> set[str]:
         for canonical, patterns in _COMPILED_ALIASES.items()
         if any(pattern.search(text) for pattern in patterns)
     }
+
+
+def _count_skill_mentions(text: str) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for canonical, patterns in _COMPILED_ALIASES.items():
+        mentions = sum(len(pattern.findall(text)) for pattern in patterns)
+        if mentions:
+            counts[canonical] = mentions
+    return counts
+
+
+def generate_resume_search_queries(
+    resume_text: str,
+    *,
+    limit: int = 3,
+) -> dict[str, Any]:
+    """Build broad skill/domain searches without requiring a job title."""
+    limit = max(1, min(5, limit))
+    skill_counts = _count_skill_mentions(resume_text)
+    skills = [
+        skill
+        for skill, _ in sorted(
+            skill_counts.items(),
+            key=lambda item: (-item[1], item[0].casefold()),
+        )
+    ]
+    folded = resume_text.casefold()
+    domains = sorted(
+        (
+            domain
+            for domain, terms in _DOMAIN_SIGNALS.items()
+            if any(_term_pattern(term).search(folded) for term in terms)
+        ),
+        key=lambda value: (
+            -sum(
+                len(_term_pattern(term).findall(folded))
+                for term in _DOMAIN_SIGNALS[value]
+            ),
+            value,
+        ),
+    )
+
+    query_specs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_query(parts: list[str], basis: list[str]) -> None:
+        words = [part for part in parts if part]
+        query = " ".join(dict.fromkeys(words))[:80].strip()
+        if not query or query.casefold() in seen:
+            return
+        seen.add(query.casefold())
+        query_specs.append(
+            {
+                "query": query,
+                "signals": basis,
+            }
+        )
+
+    if len(skills) >= 3:
+        add_query(skills[:3], skills[:3])
+        add_query(skills[1:4], skills[1:4])
+        if domains:
+            add_query([*skills[:2], domains[0]], [*skills[:2], domains[0]])
+        if len(domains) > 1:
+            add_query(
+                [skills[0], skills[2] if len(skills) > 2 else "", domains[1]],
+                [skills[0], domains[1]],
+            )
+    elif len(skills) == 2:
+        add_query(skills, skills)
+        if domains:
+            add_query([*skills, domains[0]], [*skills, domains[0]])
+        if len(domains) > 1:
+            add_query([skills[0], domains[1]], [skills[0], domains[1]])
+    elif len(skills) == 1:
+        add_query(skills, skills)
+        for domain in domains[:2]:
+            add_query([skills[0], domain], [skills[0], domain])
+
+    if not query_specs:
+        summary_line = next(
+            (line for line in _clean_lines(resume_text) if len(line) >= 3),
+            "",
+        )
+        if summary_line:
+            add_query([summary_line[:60]], ["resume summary"])
+
+    return {
+        "queries": query_specs[:limit],
+        "skills": skills[:8],
+        "domains": domains[:4],
+    }
+
+
+def merge_job_search_results(
+    results: list[dict[str, Any]],
+    query_specs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Merge several job searches, preserving the query that found each job."""
+    job_ids: list[str] = []
+    seen_ids: set[str] = set()
+    references: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    promoted: list[str] = []
+    sections: list[str] = []
+    errors: dict[str, Any] = {}
+
+    for index, result in enumerate(results):
+        query = (
+            str(query_specs[index].get("query", ""))
+            if index < len(query_specs)
+            else ""
+        )
+        result_sections = result.get("sections")
+        if isinstance(result_sections, dict) and result_sections.get(
+            "search_results"
+        ):
+            sections.append(
+                f"Search query: {query}\n{result_sections['search_results']}"
+            )
+        for raw in (
+            result.get("references", {}).get("search_results", [])
+            if isinstance(result.get("references"), dict)
+            else []
+        ):
+            if not isinstance(raw, dict):
+                continue
+            ref = dict(raw)
+            if ref.get("kind") == "job":
+                ref["search_query"] = query
+            url = str(ref.get("url", ""))
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            references.append(ref)
+        for value in result.get("job_ids", []):
+            job_id = str(value)
+            if job_id not in seen_ids:
+                seen_ids.add(job_id)
+                job_ids.append(job_id)
+                if not any(
+                    ref.get("kind") == "job"
+                    and ref.get("url", "").rstrip("/").endswith(f"/{job_id}")
+                    for ref in references
+                ):
+                    references.append(
+                        {
+                            "kind": "job",
+                            "url": f"/jobs/view/{job_id}/",
+                            "search_query": query,
+                        }
+                    )
+        promoted.extend(
+            str(value)
+            for value in result.get("promoted_job_ids", [])
+            if str(value) not in promoted
+        )
+        result_errors = result.get("section_errors")
+        if isinstance(result_errors, dict):
+            for section, detail in result_errors.items():
+                errors[f"{query}:{section}"] = detail
+
+    merged: dict[str, Any] = {
+        "url": "resume-search",
+        "sections": (
+            {"search_results": "\n---\n".join(sections)} if sections else {}
+        ),
+        "job_ids": job_ids,
+        "references": {"search_results": references},
+        "search_queries": [
+            str(spec.get("query", "")) for spec in query_specs
+        ],
+    }
+    if promoted:
+        merged["promoted_job_ids"] = promoted
+    if errors:
+        merged["section_errors"] = errors
+    return merged
 
 
 def _clean_lines(text: str) -> list[str]:
@@ -1023,7 +1216,8 @@ def _analyze_one_job(
     matched = sorted(job_skills & known_profile, key=str.casefold)
     missing = sorted(job_skills - known_profile, key=str.casefold)
 
-    query_tokens = _significant_tokens(query)
+    comparison_query = entry.get("search_query", query)
+    query_tokens = _significant_tokens(str(comparison_query))
     title = entry.get("title", "")
     title_tokens = _significant_tokens(f"{title} {job_text[:800]}")
     role_alignment = (
@@ -1243,6 +1437,11 @@ def analyze_job_fit(
         ],
         "improvement_roadmap": improvement_roadmap,
         "experience_gap_jobs": experience_gap_jobs,
+        "search_mode": search_result.get("search_mode", "query"),
+        "search_queries": search_result.get("search_queries", [query]),
+        "resume_search_signals": search_result.get(
+            "resume_search_signals", {}
+        ),
         "jobs": jobs,
         "methodology": (
             "Fit is a heuristic based on skill evidence found in the captured "
@@ -1259,6 +1458,12 @@ def format_fit_report(report: dict[str, Any]) -> str:
         "LINKEDIN JOB FIT OVERVIEW",
         "",
         f'Search: {report["query"]}',
+        (
+            "Search mode: resume-based skills (no exact job-title filter)"
+            if report.get("search_mode") == "resume"
+            else "Search mode: requested keywords"
+        ),
+        f'Queries used: {", ".join(report.get("search_queries", []))}',
         (
             f'Profile: {report["profile_name"]} '
             f'({report.get("profile_url") or "supplied profile document"})'
@@ -1391,6 +1596,10 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.prepared_for": "Prepared for",
         "app.current_role": "Current or most recent role",
         "app.this_profile": "This profile",
+        "app.search_mode": "Search mode",
+        "app.resume_mode": "Resume-based skills, no exact title filter",
+        "app.keyword_mode": "Requested keywords",
+        "app.queries_used": "Queries used",
         "app.profile": "Profile",
         "app.jobs_analysed": "jobs analysed",
         "language.label": "Report language",
@@ -1529,6 +1738,10 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.prepared_for": "报告对象",
         "app.current_role": "当前或最近职位",
         "app.this_profile": "此档案",
+        "app.search_mode": "搜索模式",
+        "app.resume_mode": "基于简历技能，不限定精确职位名称",
+        "app.keyword_mode": "指定关键词",
+        "app.queries_used": "使用的搜索词",
         "app.profile": "档案",
         "app.jobs_analysed": "个职位已分析",
         "language.label": "报告语言",
@@ -1658,6 +1871,10 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.prepared_for": "Erstellt für",
         "app.current_role": "Aktuelle oder letzte Rolle",
         "app.this_profile": "Dieses Profil",
+        "app.search_mode": "Suchmodus",
+        "app.resume_mode": "Kompetenzen aus dem Lebenslauf, kein exakter Titelfilter",
+        "app.keyword_mode": "Angegebene Suchbegriffe",
+        "app.queries_used": "Verwendete Suchanfragen",
         "app.profile": "Profil",
         "app.jobs_analysed": "Stellen analysiert",
         "language.label": "Berichtssprache",
@@ -2345,6 +2562,12 @@ def render_fit_report_html(
     profile_label = _e(report.get("profile_url") or "Supplied profile document")
     profile_name = _value_or_i18n(report.get("profile_name"), "app.this_profile")
     recent_role = report.get("recent_role")
+    search_mode_key = (
+        "app.resume_mode"
+        if report.get("search_mode") == "resume"
+        else "app.keyword_mode"
+    )
+    queries_used = " · ".join(report.get("search_queries", []))
 
     summary_rows = "".join(
         f"""
@@ -2714,11 +2937,13 @@ def render_fit_report_html(
       </div>
       <div class="hero-meta">
         <span><span data-i18n="app.generated">{_e(_i18n_text("app.generated"))}</span> {_e(generated_at)}</span>
+        <span><span data-i18n="app.search_mode">{_e(_i18n_text("app.search_mode"))}</span>: <span data-i18n="{search_mode_key}">{_e(_i18n_text(search_mode_key))}</span></span>
         <span><span data-i18n="app.prepared_for">{_e(_i18n_text("app.prepared_for"))}</span>: {profile_name}</span>
         {f'<span><span data-i18n="app.current_role">{_e(_i18n_text("app.current_role"))}</span>: {_e(recent_role)}</span>' if recent_role else ''}
         <span><span data-i18n="app.profile">{_e(_i18n_text("app.profile"))}</span>: {profile_link}</span>
         <span>{_e(report['jobs_analyzed'])} <span data-i18n="app.jobs_analysed">{_e(_i18n_text("app.jobs_analysed"))}</span></span>
       </div>
+      <p class="job-meta"><span data-i18n="app.queries_used">{_e(_i18n_text("app.queries_used"))}</span>: {_e(queries_used)}</p>
       <p><strong data-i18n="overview.methodology_title">{_e(_i18n_text("overview.methodology_title"))}.</strong>
         <span data-i18n="overview.methodology">{_e(_i18n_text("overview.methodology"))}</span></p>
     </header>
