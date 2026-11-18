@@ -30,10 +30,92 @@ def test_search_shortcuts_reach_the_job_search_arguments():
         "job_type": None,
         "experience_level": None,
         "work_type": "remote",
+        "company_ids": None,
         "easy_apply": True,
         "sort_by": None,
     }
     assert args.limit == 7
+
+
+def test_company_options_reach_the_job_search_arguments():
+    args = direct_cli.build_parser().parse_args(
+        [
+            "search",
+            "python",
+            "--company",
+            "Siemens",
+            "--company-id",
+            "1115,2573558",
+        ]
+    )
+
+    assert args.company == ["Siemens"]
+    assert args.company_id == ["1115,2573558"]
+    assert direct_cli._split_filter_values(
+        args.company_id
+    ) == ["1115", "2573558"]
+
+
+async def test_company_names_are_resolved_to_linkedin_ids():
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            if name == "search_companies":
+                data = {
+                    "url": "https://www.linkedin.com/search/results/companies/",
+                    "sections": {"search_results": "Siemens"},
+                    "references": {
+                        "search_results": [
+                            {
+                                "kind": "company",
+                                "url": "/company/siemens/",
+                                "text": "Siemens AG",
+                            }
+                        ]
+                    },
+                }
+            else:
+                data = {
+                    "url": "https://www.linkedin.com/company/siemens/",
+                    "sections": {"about": "Siemens"},
+                    "references": {
+                        "about": [
+                            {
+                                "kind": "company_urn",
+                                "url": "/search/results/people/",
+                                "value": "123",
+                            }
+                        ]
+                    },
+                }
+            return SimpleNamespace(is_error=False, structured_content=data)
+
+    client = Client()
+    ids, resolutions = await direct_cli._resolve_company_filters(
+        client,
+        SimpleNamespace(company=["Siemens AG"], company_id=["1115"]),
+    )
+
+    assert ids == "123,1115"
+    assert resolutions == [
+        {
+            "input": "Siemens AG",
+            "company_id": "123",
+            "linkedin_slug": "siemens",
+        },
+        {
+            "input": "1115",
+            "company_id": "1115",
+            "linkedin_slug": "",
+        },
+    ]
+    assert [name for name, _ in client.calls] == [
+        "search_companies",
+        "get_company_profile",
+    ]
 
 
 def test_search_formatter_names_jobs_and_preserves_linkedin_links():
@@ -112,6 +194,7 @@ def test_search_command_prints_results(monkeypatch, capsys):
                     "job_type": None,
                     "experience_level": None,
                     "work_type": "remote",
+                    "company_ids": None,
                     "easy_apply": False,
                     "sort_by": None,
                 },
@@ -407,6 +490,13 @@ def test_resume_search_does_not_require_a_job_title(
                 "domains": ["data"],
                 "query_specs": [],
             },
+            "company_filters": [
+                {
+                    "input": "Siemens AG",
+                    "company_id": "123",
+                    "linkedin_slug": "siemens",
+                }
+            ],
             "references": {
                 "search_results": [
                     {
@@ -458,4 +548,5 @@ def test_resume_search_does_not_require_a_job_title(
     output = capsys.readouterr().out
     assert "resume-based skills" in output
     assert "Python SQL Databricks" in output
+    assert "Siemens AG (ID 123)" in output
     assert report_path.exists()

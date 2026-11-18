@@ -18,6 +18,7 @@ import webbrowser
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
 DATE_POSTED_CHOICES = ("past_hour", "past_24_hours", "past_week", "past_month")
@@ -182,6 +183,26 @@ def _add_search_filters(
         "--sort",
         choices=("date", "relevance"),
         help="Result ordering.",
+    )
+    parser.add_argument(
+        "--company",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help=(
+            "Limit results to a company name or LinkedIn company slug. "
+            "Repeat or comma-separate for multiple companies."
+        ),
+    )
+    parser.add_argument(
+        "--company-id",
+        action="append",
+        default=[],
+        metavar="ID",
+        help=(
+            "Limit results to numeric LinkedIn company ID(s). "
+            "Repeat or comma-separate for multiple companies."
+        ),
     )
 
 
@@ -543,7 +564,12 @@ def format_job_details(
     return "\n".join(lines)
 
 
-def _search_arguments(args: argparse.Namespace, query: str) -> dict[str, Any]:
+def _search_arguments(
+    args: argparse.Namespace,
+    query: str,
+    *,
+    company_ids: str | None = None,
+) -> dict[str, Any]:
     return {
         "keywords": query,
         "location": args.location,
@@ -552,6 +578,7 @@ def _search_arguments(args: argparse.Namespace, query: str) -> dict[str, Any]:
         "job_type": args.job_type,
         "experience_level": args.experience,
         "work_type": args.work_type,
+        "company_ids": company_ids,
         "easy_apply": args.easy_apply,
         "sort_by": args.sort,
     }
@@ -705,6 +732,132 @@ def _write_and_open_report(
         print(f"Opened report in {browser}.", file=stream)
 
 
+def _split_filter_values(values: list[str] | None) -> list[str]:
+    return [
+        item.strip()
+        for value in values or []
+        for item in value.split(",")
+        if item.strip()
+    ]
+
+
+def _company_slug_from_reference(reference: dict[str, Any]) -> str | None:
+    url = str(reference.get("url", ""))
+    path = urlparse(url).path.rstrip("/")
+    marker = "/company/"
+    if marker not in path:
+        return None
+    slug = path.split(marker, 1)[1].split("/", 1)[0].strip()
+    return slug or None
+
+
+async def _resolve_company_filters(
+    client: Any,
+    args: argparse.Namespace,
+) -> tuple[str | None, list[dict[str, str]]]:
+    """Resolve numeric IDs and company names to LinkedIn job facet IDs."""
+    from linkedin_mcp_server.core.exceptions import LinkedInOperationError
+    from linkedin_mcp_server.linkedin.identifiers import (
+        normalize_company_identifier,
+    )
+
+    values = [
+        *_split_filter_values(getattr(args, "company", None)),
+        *_split_filter_values(getattr(args, "company_id", None)),
+    ]
+    ids: list[str] = []
+    resolutions: list[dict[str, str]] = []
+    for value in values:
+        if value.isdigit():
+            if value not in ids:
+                ids.append(value)
+                resolutions.append(
+                    {
+                        "input": value,
+                        "company_id": value,
+                        "linkedin_slug": "",
+                    }
+                )
+            continue
+
+        slug: str | None = None
+        try:
+            slug = normalize_company_identifier(value)
+        except LinkedInOperationError:
+            search_result = _structured_result(
+                await client.call_tool(
+                    "search_companies",
+                    {"keywords": value},
+                )
+            )
+            references = (
+                search_result.get("references", {}).get("search_results", [])
+                if isinstance(search_result.get("references"), dict)
+                else []
+            )
+            candidates = [
+                ref
+                for ref in references
+                if isinstance(ref, dict) and ref.get("kind") == "company"
+            ]
+            exact = [
+                ref
+                for ref in candidates
+                if str(ref.get("text", "")).strip().casefold()
+                == value.casefold()
+            ]
+            selected = exact[0] if exact else candidates[0] if candidates else None
+            if selected is None:
+                raise DirectCommandError(
+                    f"Could not resolve company {value!r}. "
+                    "Try a LinkedIn company slug or --company-id."
+                )
+            slug = _company_slug_from_reference(selected)
+            if slug is None:
+                raise DirectCommandError(
+                    f"LinkedIn returned no company slug for {value!r}. "
+                    "Try --company-id."
+                )
+
+        company_profile = _structured_result(
+            await client.call_tool(
+                "get_company_profile",
+                {"company_name": slug},
+            )
+        )
+        about_refs = (
+            company_profile.get("references", {}).get("about", [])
+            if isinstance(company_profile.get("references"), dict)
+            else []
+        )
+        company_urn = next(
+            (
+                str(ref.get("value"))
+                for ref in about_refs
+                if isinstance(ref, dict)
+                and ref.get("kind") == "company_urn"
+                and str(ref.get("value", "")).isdigit()
+            ),
+            None,
+        )
+        if company_urn is None:
+            raise DirectCommandError(
+                f"Could not determine the LinkedIn company ID for {value!r}. "
+                "Open the company page and use --company-id with its numeric ID."
+            )
+        if company_urn not in ids:
+            ids.append(company_urn)
+        resolutions.append(
+            {
+                "input": value,
+                "company_id": company_urn,
+                "linkedin_slug": slug,
+            }
+        )
+
+    return (",".join(ids) if ids else None), resolutions
+
+
 async def _collect_analysis(
     args: argparse.Namespace,
     query: str | None,
@@ -721,9 +874,15 @@ async def _collect_analysis(
     from linkedin_mcp_server.server import create_mcp_server
 
     profile = _profile_document(args.profile_file) if args.profile_file else None
-    toolset = "jobs" if profile is not None else "full"
+    has_company_names = bool(
+        _split_filter_values(getattr(args, "company", None))
+    )
+    toolset = "jobs" if profile is not None and not has_company_names else "full"
     server = create_mcp_server(tool_timeout=tool_timeout, toolset=toolset)
     async with Client(server) as client:
+        company_ids, company_resolutions = await _resolve_company_filters(
+            client, args
+        )
         if args.resume_search:
             if profile is None:
                 raise DirectCommandError(
@@ -747,7 +906,11 @@ async def _collect_analysis(
                     _structured_result(
                         await client.call_tool(
                             "search_jobs",
-                            _search_arguments(args, query_spec["query"]),
+                            _search_arguments(
+                                args,
+                                query_spec["query"],
+                                company_ids=company_ids,
+                            ),
                         )
                     )
                 )
@@ -766,9 +929,16 @@ async def _collect_analysis(
                 raise DirectCommandError("A search query is required.")
             search_result = _structured_result(
                 await client.call_tool(
-                    "search_jobs", _search_arguments(args, query)
+                    "search_jobs",
+                    _search_arguments(
+                        args,
+                        query,
+                        company_ids=company_ids,
+                    ),
                 )
             )
+        if company_resolutions:
+            search_result["company_filters"] = company_resolutions
 
         entries = _job_entries(search_result)
         selected = entries if args.limit == 0 else entries[: args.limit]

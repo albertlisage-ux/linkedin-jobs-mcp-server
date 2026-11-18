@@ -108,6 +108,7 @@ def build_job_search_url(
     job_type: str | None = None,
     experience_level: str | None = None,
     work_type: str | None = None,
+    company_ids: str | None = None,
     easy_apply: bool = False,
     sort_by: str | None = None,
 ) -> str:
@@ -130,6 +131,8 @@ def build_job_search_url(
         params += f"&f_E={_normalize_csv(experience_level, EXPERIENCE_LEVEL_MAP)}"
     if work_type:
         params += f"&f_WT={_normalize_csv(work_type, WORK_TYPE_MAP)}"
+    if company_ids:
+        params += f"&f_C={_normalize_csv(company_ids, {})}"
     if easy_apply:
         params += "&f_EA=true"
     if sort_by:

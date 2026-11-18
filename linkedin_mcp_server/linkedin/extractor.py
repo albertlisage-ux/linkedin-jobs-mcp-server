@@ -175,6 +175,7 @@ class LinkedInExtractor:
         job_type: str | None = None,
         experience_level: str | None = None,
         work_type: str | None = None,
+        company_ids: str | None = None,
         easy_apply: bool = False,
         sort_by: str | None = None,
         tool_timeout: float = DEFAULT_TOOL_TIMEOUT_SECONDS,
@@ -182,15 +183,16 @@ class LinkedInExtractor:
         """Search for jobs with pagination and job ID extraction."""
         return await self._jobs.search_jobs(
             keywords,
-            location,
-            max_pages,
-            date_posted,
-            job_type,
-            experience_level,
-            work_type,
-            easy_apply,
-            sort_by,
-            tool_timeout,
+            location=location,
+            max_pages=max_pages,
+            date_posted=date_posted,
+            job_type=job_type,
+            experience_level=experience_level,
+            work_type=work_type,
+            company_ids=company_ids,
+            easy_apply=easy_apply,
+            sort_by=sort_by,
+            tool_timeout=tool_timeout,
         )
 
     async def get_saved_jobs(

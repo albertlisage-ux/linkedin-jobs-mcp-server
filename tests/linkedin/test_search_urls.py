@@ -208,6 +208,11 @@ class TestBuildJobSearchUrl:
             f"{JOBS}keywords=python&location=New+York"
         )
 
+    def test_company_ids_become_the_job_company_facet(self):
+        assert build_job_search_url("python", company_ids="1115,2573558") == (
+            f"{JOBS}keywords=python&f_C=1115,2573558"
+        )
+
     @pytest.mark.parametrize(
         "date_posted,code",
         [

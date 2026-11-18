@@ -1439,6 +1439,7 @@ def analyze_job_fit(
         "experience_gap_jobs": experience_gap_jobs,
         "search_mode": search_result.get("search_mode", "query"),
         "search_queries": search_result.get("search_queries", [query]),
+        "company_filters": search_result.get("company_filters", []),
         "resume_search_signals": search_result.get(
             "resume_search_signals", {}
         ),
@@ -1464,6 +1465,15 @@ def format_fit_report(report: dict[str, Any]) -> str:
             else "Search mode: requested keywords"
         ),
         f'Queries used: {", ".join(report.get("search_queries", []))}',
+        (
+            "Company filter: "
+            + ", ".join(
+                f'{item["input"]} (ID {item["company_id"]})'
+                for item in report.get("company_filters", [])
+            )
+            if report.get("company_filters")
+            else "Company filter: none"
+        ),
         (
             f'Profile: {report["profile_name"]} '
             f'({report.get("profile_url") or "supplied profile document"})'
@@ -1600,6 +1610,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.resume_mode": "Resume-based skills, no exact title filter",
         "app.keyword_mode": "Requested keywords",
         "app.queries_used": "Queries used",
+        "app.company_filter": "Company filter",
+        "app.none": "None",
         "app.profile": "Profile",
         "app.jobs_analysed": "jobs analysed",
         "language.label": "Report language",
@@ -1742,6 +1754,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.resume_mode": "基于简历技能，不限定精确职位名称",
         "app.keyword_mode": "指定关键词",
         "app.queries_used": "使用的搜索词",
+        "app.company_filter": "公司筛选",
+        "app.none": "无",
         "app.profile": "档案",
         "app.jobs_analysed": "个职位已分析",
         "language.label": "报告语言",
@@ -1875,6 +1889,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.resume_mode": "Kompetenzen aus dem Lebenslauf, kein exakter Titelfilter",
         "app.keyword_mode": "Angegebene Suchbegriffe",
         "app.queries_used": "Verwendete Suchanfragen",
+        "app.company_filter": "Unternehmensfilter",
+        "app.none": "Keine",
         "app.profile": "Profil",
         "app.jobs_analysed": "Stellen analysiert",
         "language.label": "Berichtssprache",
@@ -2568,6 +2584,15 @@ def render_fit_report_html(
         else "app.keyword_mode"
     )
     queries_used = " · ".join(report.get("search_queries", []))
+    company_filter_values = " · ".join(
+            f'{item["input"]} (ID {item["company_id"]})'
+            for item in report.get("company_filters", [])
+        )
+    company_filter_html = (
+        _e(company_filter_values)
+        if company_filter_values
+        else _i18n_span("app.none")
+    )
 
     summary_rows = "".join(
         f"""
@@ -2944,6 +2969,7 @@ def render_fit_report_html(
         <span>{_e(report['jobs_analyzed'])} <span data-i18n="app.jobs_analysed">{_e(_i18n_text("app.jobs_analysed"))}</span></span>
       </div>
       <p class="job-meta"><span data-i18n="app.queries_used">{_e(_i18n_text("app.queries_used"))}</span>: {_e(queries_used)}</p>
+      <p class="job-meta"><span data-i18n="app.company_filter">{_e(_i18n_text("app.company_filter"))}</span>: {company_filter_html}</p>
       <p><strong data-i18n="overview.methodology_title">{_e(_i18n_text("overview.methodology_title"))}.</strong>
         <span data-i18n="overview.methodology">{_e(_i18n_text("overview.methodology"))}</span></p>
     </header>

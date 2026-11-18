@@ -1538,9 +1538,18 @@ class TestJobTools:
 
         serve_extractor(mock_extractor)
         tool_fn = await get_tool_fn(mcp, "search_jobs")
-        result = await tool_fn("python", mock_context, location="Remote")
+        result = await tool_fn(
+            "python",
+            mock_context,
+            location="Remote",
+            company_ids="1115,2573558",
+        )
         assert "search_results" in result["sections"]
         assert "pages_visited" not in result
+        assert (
+            mock_extractor.search_jobs.await_args.kwargs["company_ids"]
+            == "1115,2573558"
+        )
 
     async def test_search_jobs_is_bounded_by_the_registered_timeout(
         self, mock_context, serve_extractor

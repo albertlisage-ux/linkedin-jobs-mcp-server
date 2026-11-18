@@ -167,6 +167,28 @@ linkedin-jobs-mcp search \
   --html linkedin-jobs-report.html
 ```
 
+Limit either mode to one or more companies:
+
+```bash
+linkedin-jobs-mcp search \
+  --resume ~/Downloads/Profile.pdf \
+  --resume-search \
+  --company Siemens \
+  --company "SAP SE" \
+  --company-id 1115,2573558 \
+  --location Erlangen \
+  --remote \
+  --this-week \
+  --limit 5 \
+  --language zh \
+  --html linkedin-jobs-report.html
+```
+
+`--company` accepts company names, LinkedIn company slugs or company URLs and
+resolves them to numeric LinkedIn IDs. `--company-id` skips resolution when the
+numeric IDs are already known. Multiple values can be repeated or comma-separated.
+The report records the company name, resolved slug and final LinkedIn ID.
+
 `--resume-search` detects and ranks skills and domain signals from the resume,
 generates up to five complementary queries, runs them through LinkedIn, removes
 duplicate jobs and analyzes the merged result. The report records the resume
@@ -267,6 +289,8 @@ state and references. Feed a returned job ID to `get_job_details`,
 - `job_type`: `full_time`, `part_time`, `contract`, `temporary`, `volunteer`, `internship`, `other`
 - `experience_level`: `internship`, `entry`, `associate`, `mid_senior`, `director`, `executive`
 - `work_type`: `on_site`, `remote`, `hybrid`
+- `company`: company name, slug or URL in the direct CLI; resolved to `f_C`
+- `company_ids`: numeric LinkedIn company IDs in the MCP tool
 - `easy_apply`
 - `sort_by`: `date`, `relevance`
 - `max_pages`: 1 to 10

@@ -173,6 +173,7 @@ def register_job_tools(
         job_type: str | None = None,
         experience_level: str | None = None,
         work_type: str | None = None,
+        company_ids: str | None = None,
         easy_apply: bool = False,
         sort_by: str | None = None,
     ) -> dict[str, Any]:
@@ -198,6 +199,7 @@ def register_job_tools(
             job_type: Filter by job type, comma-separated (full_time, part_time, contract, temporary, volunteer, internship, other). Classic search only.
             experience_level: Filter by experience level, comma-separated (internship, entry, associate, mid_senior, director, executive). Classic search only.
             work_type: Filter by work type, comma-separated (on_site, remote, hybrid). Classic search only.
+            company_ids: Optional numeric LinkedIn company IDs, comma-separated. Classic search only.
             easy_apply: Only show Easy Apply jobs (default false). Classic search only.
             sort_by: Sort results (date, relevance). Classic search only.
 
@@ -241,6 +243,7 @@ def register_job_tools(
             job_type=job_type,
             experience_level=experience_level,
             work_type=work_type,
+            company_ids=company_ids,
             easy_apply=easy_apply,
             sort_by=sort_by,
             # What is left of the figure FastMCP cancels this call on.

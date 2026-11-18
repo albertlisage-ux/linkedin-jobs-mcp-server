@@ -237,6 +237,7 @@ class JobReader:
         job_type: str | None = None,
         experience_level: str | None = None,
         work_type: str | None = None,
+        company_ids: str | None = None,
         easy_apply: bool = False,
         sort_by: str | None = None,
         tool_timeout: float = DEFAULT_TOOL_TIMEOUT_SECONDS,
@@ -255,6 +256,7 @@ class JobReader:
             job_type: Filter by job type (full_time, part_time, contract, temporary, volunteer, internship, other)
             experience_level: Filter by experience level (internship, entry, associate, mid_senior, director, executive)
             work_type: Filter by work type (on_site, remote, hybrid)
+            company_ids: Numeric LinkedIn company IDs, comma-separated
             easy_apply: Only show Easy Apply jobs
             sort_by: Sort results (date, relevance)
 
@@ -271,6 +273,7 @@ class JobReader:
             job_type=job_type,
             experience_level=experience_level,
             work_type=work_type,
+            company_ids=company_ids,
             easy_apply=easy_apply,
             sort_by=sort_by,
         )

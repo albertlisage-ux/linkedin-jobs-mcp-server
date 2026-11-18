@@ -36,6 +36,7 @@ jobs:
           tests/test_jobs_only_server.py
           tests/test_direct_cli.py
           tests/test_job_analysis.py
+          tests/linkedin/test_search_urls.py
           tests/linkedin/test_jobs.py
           tests/linkedin/test_job_pages.py
           tests/test_tools.py::TestJobTools
