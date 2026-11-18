@@ -192,6 +192,8 @@ linkedin-jobs-mcp search \
 resolves them to numeric LinkedIn IDs. `--company-id` skips resolution when the
 numeric IDs are already known. Multiple values can be repeated or comma-separated.
 The report records the company name, resolved slug and final LinkedIn ID.
+If `--company` or `--company-id` is omitted, empty, `all`, `any` or `*`, no
+company restriction is applied and jobs from every company are included.
 
 `--radius-km 50` uses LinkedIn's native distance facet around `--location`.
 For Erlangen, LinkedIn therefore includes matching jobs in nearby cities inside

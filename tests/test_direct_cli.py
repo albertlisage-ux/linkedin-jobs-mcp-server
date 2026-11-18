@@ -72,6 +72,39 @@ def test_location_radius_reaches_the_job_search_arguments():
     assert direct_cli._search_arguments(args, args.query)["distance_km"] == 50
 
 
+@pytest.mark.parametrize(
+    "values",
+    [
+        [],
+        [""],
+        ["all"],
+        ["any"],
+        ["全部"],
+        ["all", ""],
+    ],
+)
+def test_empty_or_all_company_filter_means_every_company(values):
+    assert direct_cli._split_filter_values(values) == []
+
+
+def test_mixed_all_and_named_company_keeps_the_named_company():
+    assert direct_cli._split_filter_values(["all, Siemens"]) == ["Siemens"]
+
+
+async def test_empty_company_filter_resolves_to_no_company_ids():
+    class Client:
+        async def call_tool(self, name, arguments):
+            raise AssertionError("empty company filter must not browse companies")
+
+    ids, resolutions = await direct_cli._resolve_company_filters(
+        Client(),
+        SimpleNamespace(company=["all"], company_id=[""]),
+    )
+
+    assert ids is None
+    assert resolutions == []
+
+
 async def test_company_names_are_resolved_to_linkedin_ids():
     class Client:
         def __init__(self):

@@ -41,6 +41,9 @@ EXPERIENCE_CHOICES = (
 )
 WORK_TYPE_CHOICES = ("on_site", "remote", "hybrid")
 TRACKER_STAGES = ("saved", "in_progress", "applied", "archived")
+_ALL_COMPANIES_TOKENS = frozenset(
+    {"all", "any", "*", "全部", "alle", "alle unternehmen"}
+)
 
 
 class DirectCommandError(RuntimeError):
@@ -200,7 +203,8 @@ def _add_search_filters(
         metavar="NAME",
         help=(
             "Limit results to a company name or LinkedIn company slug. "
-            "Repeat or comma-separate for multiple companies."
+            "Repeat or comma-separate for multiple companies. Empty or 'all' "
+            "means every company."
         ),
     )
     parser.add_argument(
@@ -210,7 +214,8 @@ def _add_search_filters(
         metavar="ID",
         help=(
             "Limit results to numeric LinkedIn company ID(s). "
-            "Repeat or comma-separate for multiple companies."
+            "Repeat or comma-separate for multiple companies. Empty or 'all' "
+            "means every company."
         ),
     )
     parser.add_argument(
@@ -779,11 +784,18 @@ def _write_and_open_report(
 
 
 def _split_filter_values(values: list[str] | None) -> list[str]:
-    return [
+    items = [
         item.strip()
         for value in values or []
         for item in value.split(",")
         if item.strip()
+    ]
+    if all(item.casefold() in _ALL_COMPANIES_TOKENS for item in items):
+        return []
+    return [
+        item
+        for item in items
+        if item.casefold() not in _ALL_COMPANIES_TOKENS
     ]
 
 

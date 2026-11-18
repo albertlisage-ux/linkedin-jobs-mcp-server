@@ -35,6 +35,8 @@ substantive changes are:
   restrictions and reporting every fallback attempt.
 - Job search supports LinkedIn's native location distance facet so a city query
   can include nearby cities within a configurable kilometre radius.
+- Empty, `all`, `any` or `*` company filters explicitly remove the LinkedIn
+  company restriction.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.
