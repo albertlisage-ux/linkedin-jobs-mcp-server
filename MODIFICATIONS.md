@@ -24,6 +24,9 @@ substantive changes are:
   plans, plus resume-driven multi-query job search without an exact title.
 - `direct_cli.py`: reads text, Markdown and text-based PDF resumes directly,
   using pypdf for PDF extraction.
+- Resume search uses shorter two-term queries and an adaptive fallback that
+  relaxes optional filters only after a zero-result search, preserving company
+  restrictions and reporting every fallback attempt.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.

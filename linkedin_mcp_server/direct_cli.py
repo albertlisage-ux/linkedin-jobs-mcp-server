@@ -204,6 +204,14 @@ def _add_search_filters(
             "Repeat or comma-separate for multiple companies."
         ),
     )
+    parser.add_argument(
+        "--strict-filters",
+        action="store_true",
+        help=(
+            "Do not automatically relax location, remote, date or job-type "
+            "filters when a resume search returns no jobs."
+        ),
+    )
 
 
 def _add_profile_analysis_options(parser: argparse.ArgumentParser) -> None:
@@ -584,6 +592,27 @@ def _search_arguments(
     }
 
 
+def _relaxed_search_arguments(
+    args: argparse.Namespace,
+    query: str,
+    *,
+    company_ids: str | None,
+) -> dict[str, Any]:
+    arguments = _search_arguments(args, query, company_ids=company_ids)
+    arguments.update(
+        {
+            "location": None,
+            "date_posted": None,
+            "job_type": None,
+            "experience_level": None,
+            "work_type": None,
+            "easy_apply": False,
+            "sort_by": None,
+        }
+    )
+    return arguments
+
+
 def _profile_document(path: str) -> dict[str, Any]:
     profile_path = Path(path).expanduser()
     if not profile_path.exists():
@@ -900,6 +929,7 @@ async def _collect_analysis(
                     "Could not derive search queries from the resume."
                 )
             query_specs = search_context["queries"]
+            all_query_specs = list(query_specs)
             search_results = []
             for query_spec in query_specs:
                 search_results.append(
@@ -914,11 +944,68 @@ async def _collect_analysis(
                         )
                     )
                 )
+            fallback_attempts: list[dict[str, Any]] = []
+            if (
+                not args.strict_filters
+                and search_results
+                and not any(result.get("job_ids") for result in search_results)
+            ):
+                fallback_queries: list[tuple[str, str]] = []
+                skills = search_context.get("skills", [])
+                if len(skills) >= 2:
+                    fallback_queries.append(
+                        (" ".join(skills[:2]), "top two resume skills")
+                    )
+                if skills:
+                    fallback_queries.append((skills[0], "top resume skill"))
+                if company_ids:
+                    fallback_queries.append(("", "all jobs from selected company"))
+
+                for fallback_query, basis in fallback_queries:
+                    fallback_result = _structured_result(
+                        await client.call_tool(
+                            "search_jobs",
+                            _relaxed_search_arguments(
+                                args,
+                                fallback_query,
+                                company_ids=company_ids,
+                            ),
+                        )
+                    )
+                    fallback_spec = {
+                        "query": fallback_query,
+                        "signals": [basis, "filters relaxed"],
+                    }
+                    all_query_specs.append(fallback_spec)
+                    search_results.append(fallback_result)
+                    fallback_attempts.append(
+                        {
+                            "query": fallback_query,
+                            "basis": basis,
+                            "job_ids": list(fallback_result.get("job_ids", [])),
+                            "relaxed_filters": [
+                                "location",
+                                "date_posted",
+                                "job_type",
+                                "experience_level",
+                                "work_type",
+                                "easy_apply",
+                            ],
+                        }
+                    )
+                    if fallback_result.get("job_ids"):
+                        break
             search_result = merge_job_search_results(
                 search_results,
-                query_specs,
+                all_query_specs,
             )
             search_result["search_mode"] = "resume"
+            if fallback_attempts:
+                search_result["fallback_search"] = {
+                    "used": True,
+                    "attempts": fallback_attempts,
+                    "found_jobs": bool(search_result.get("job_ids")),
+                }
             search_result["resume_search_signals"] = {
                 "skills": search_context["skills"],
                 "domains": search_context["domains"],

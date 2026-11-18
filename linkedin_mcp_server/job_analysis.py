@@ -414,14 +414,14 @@ def generate_resume_search_queries(
         )
 
     if len(skills) >= 3:
-        add_query(skills[:3], skills[:3])
-        add_query(skills[1:4], skills[1:4])
+        add_query(skills[:2], skills[:2])
+        add_query(skills[1:3], skills[1:3])
         if domains:
-            add_query([*skills[:2], domains[0]], [*skills[:2], domains[0]])
+            add_query([skills[0], domains[0]], [skills[0], domains[0]])
         if len(domains) > 1:
             add_query(
-                [skills[0], skills[2] if len(skills) > 2 else "", domains[1]],
-                [skills[0], domains[1]],
+                [skills[2], domains[1]],
+                [skills[2], domains[1]],
             )
     elif len(skills) == 2:
         add_query(skills, skills)
@@ -1440,6 +1440,7 @@ def analyze_job_fit(
         "search_mode": search_result.get("search_mode", "query"),
         "search_queries": search_result.get("search_queries", [query]),
         "company_filters": search_result.get("company_filters", []),
+        "fallback_search": search_result.get("fallback_search"),
         "resume_search_signals": search_result.get(
             "resume_search_signals", {}
         ),
@@ -1473,6 +1474,14 @@ def format_fit_report(report: dict[str, Any]) -> str:
             )
             if report.get("company_filters")
             else "Company filter: none"
+        ),
+        (
+            "Fallback search: "
+            + (
+                "used; location, recency and other optional filters were relaxed"
+                if (report.get("fallback_search") or {}).get("used")
+                else "not needed"
+            )
         ),
         (
             f'Profile: {report["profile_name"]} '
@@ -1612,6 +1621,11 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.queries_used": "Queries used",
         "app.company_filter": "Company filter",
         "app.none": "None",
+        "app.fallback_search": "Fallback search",
+        "app.fallback_used": (
+            "Used; location, recency and other optional filters were relaxed"
+        ),
+        "app.fallback_not_needed": "Not needed",
         "app.profile": "Profile",
         "app.jobs_analysed": "jobs analysed",
         "language.label": "Report language",
@@ -1756,6 +1770,9 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.queries_used": "使用的搜索词",
         "app.company_filter": "公司筛选",
         "app.none": "无",
+        "app.fallback_search": "备用搜索",
+        "app.fallback_used": "已启用；已放宽地点、发布时间和其他可选筛选条件",
+        "app.fallback_not_needed": "未启用",
         "app.profile": "档案",
         "app.jobs_analysed": "个职位已分析",
         "language.label": "报告语言",
@@ -1891,6 +1908,11 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.queries_used": "Verwendete Suchanfragen",
         "app.company_filter": "Unternehmensfilter",
         "app.none": "Keine",
+        "app.fallback_search": "Ersatzsuche",
+        "app.fallback_used": (
+            "Verwendet; Ort, Aktualität und weitere optionale Filter wurden gelockert"
+        ),
+        "app.fallback_not_needed": "Nicht erforderlich",
         "app.profile": "Profil",
         "app.jobs_analysed": "Stellen analysiert",
         "language.label": "Berichtssprache",
@@ -2593,6 +2615,11 @@ def render_fit_report_html(
         if company_filter_values
         else _i18n_span("app.none")
     )
+    fallback_key = (
+        "app.fallback_used"
+        if (report.get("fallback_search") or {}).get("used")
+        else "app.fallback_not_needed"
+    )
 
     summary_rows = "".join(
         f"""
@@ -2970,6 +2997,7 @@ def render_fit_report_html(
       </div>
       <p class="job-meta"><span data-i18n="app.queries_used">{_e(_i18n_text("app.queries_used"))}</span>: {_e(queries_used)}</p>
       <p class="job-meta"><span data-i18n="app.company_filter">{_e(_i18n_text("app.company_filter"))}</span>: {company_filter_html}</p>
+      <p class="job-meta"><span data-i18n="app.fallback_search">{_e(_i18n_text("app.fallback_search"))}</span>: <span data-i18n="{fallback_key}">{_e(_i18n_text(fallback_key))}</span></p>
       <p><strong data-i18n="overview.methodology_title">{_e(_i18n_text("overview.methodology_title"))}.</strong>
         <span data-i18n="overview.methodology">{_e(_i18n_text("overview.methodology"))}</span></p>
     </header>

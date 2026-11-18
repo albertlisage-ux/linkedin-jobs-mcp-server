@@ -118,6 +118,111 @@ async def test_company_names_are_resolved_to_linkedin_ids():
     ]
 
 
+async def test_resume_search_relaxes_filters_when_initial_results_are_empty(
+    monkeypatch, tmp_path
+):
+    import fastmcp
+
+    resume = tmp_path / "resume.txt"
+    resume.write_text(
+        "Azure Databricks Project Management CI/CD Python SQL",
+        encoding="utf-8",
+    )
+
+    class Client:
+        search_arguments = []
+
+        def __init__(self, server):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def call_tool(self, name, arguments):
+            if name == "search_jobs":
+                self.search_arguments.append(arguments)
+                if arguments["location"] is None:
+                    data = {
+                        "url": "https://www.linkedin.com/jobs/search/",
+                        "sections": {"search_results": "Data Engineer"},
+                        "job_ids": ["101"],
+                        "references": {
+                            "search_results": [
+                                {
+                                    "kind": "job",
+                                    "url": "/jobs/view/101/",
+                                    "text": "Data Engineer",
+                                }
+                            ]
+                        },
+                    }
+                else:
+                    data = {
+                        "url": "https://www.linkedin.com/jobs/search/",
+                        "sections": {"search_results": "No jobs"},
+                        "job_ids": [],
+                        "section_errors": {
+                            "search_results": {
+                                "error_type": "no_matching_jobs",
+                                "error_message": "No matching jobs",
+                            }
+                        },
+                    }
+            else:
+                data = {
+                    "url": "https://www.linkedin.com/jobs/view/101/",
+                    "sections": {
+                        "job_posting": (
+                            "Data Engineer\nAcme · Berlin · Remote\n"
+                            "About the job\nBuild data systems with Azure Databricks."
+                        )
+                    },
+                }
+            return SimpleNamespace(is_error=False, structured_content=data)
+
+    monkeypatch.setattr(
+        "linkedin_mcp_server.server.create_mcp_server",
+        lambda **kwargs: object(),
+    )
+    monkeypatch.setattr(fastmcp, "Client", Client)
+    args = SimpleNamespace(
+        profile_file=str(resume),
+        resume_search=True,
+        resume_queries=3,
+        strict_filters=False,
+        company=[],
+        company_id=[],
+        location="Erlangen",
+        pages=1,
+        posted="past_week",
+        job_type=None,
+        experience=None,
+        work_type="remote",
+        easy_apply=False,
+        sort=None,
+        limit=1,
+        profile_sections="experience,skills",
+        profile_scrolls=10,
+    )
+
+    search_result, profile, details = await direct_cli._collect_analysis(
+        args,
+        None,
+        tool_timeout=30.0,
+    )
+
+    assert search_result["fallback_search"]["used"] is True
+    assert search_result["fallback_search"]["found_jobs"] is True
+    assert search_result["job_ids"] == ["101"]
+    assert Client.search_arguments[-1]["location"] is None
+    assert Client.search_arguments[-1]["work_type"] is None
+    assert profile["url"] == str(resume)
+    assert details[0]["sections"]["job_posting"]
+
+
 def test_search_formatter_names_jobs_and_preserves_linkedin_links():
     data = {
         "url": "https://www.linkedin.com/jobs/search/?keywords=python",

@@ -294,7 +294,7 @@ Built analytics pipelines and data products.
 
     assert len(queries) == 3
     assert queries[0].startswith("Python")
-    assert any("SQL" in query for query in queries)
+    assert any("Databricks" in query for query in queries)
     assert "Senior Data Engineer" not in queries
     assert {"Python", "SQL", "Databricks"} <= set(context["skills"])
     assert context["domains"]
