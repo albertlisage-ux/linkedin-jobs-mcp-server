@@ -104,6 +104,7 @@ def _encode_list_facet(values: list[str]) -> str:
 def build_job_search_url(
     keywords: str,
     location: str | None = None,
+    distance_km: int | None = None,
     date_posted: str | None = None,
     job_type: str | None = None,
     experience_level: str | None = None,
@@ -121,6 +122,8 @@ def build_job_search_url(
     params = f"keywords={quote_plus(keywords)}"
     if location:
         params += f"&location={quote_plus(location)}"
+        if distance_km is not None:
+            params += f"&distance={distance_km}"
 
     if date_posted:
         mapped = JOB_DATE_POSTED_MAP.get(date_posted.strip(), date_posted)

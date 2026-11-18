@@ -1542,6 +1542,7 @@ class TestJobTools:
             "python",
             mock_context,
             location="Remote",
+            distance_km=50,
             company_ids="1115,2573558",
         )
         assert "search_results" in result["sections"]
@@ -1549,6 +1550,10 @@ class TestJobTools:
         assert (
             mock_extractor.search_jobs.await_args.kwargs["company_ids"]
             == "1115,2573558"
+        )
+        assert (
+            mock_extractor.search_jobs.await_args.kwargs["distance_km"]
+            == 50
         )
 
     async def test_search_jobs_is_bounded_by_the_registered_timeout(

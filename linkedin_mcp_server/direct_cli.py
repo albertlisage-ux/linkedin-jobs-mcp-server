@@ -111,6 +111,15 @@ def _add_search_filters(
     )
     parser.add_argument("--location", help="City, region, country or Remote.")
     parser.add_argument(
+        "--radius-km",
+        type=int,
+        metavar="KM",
+        help=(
+            "Include LinkedIn jobs within this many kilometres of --location "
+            "(0-100). For example, --radius-km 50 includes nearby cities."
+        ),
+    )
+    parser.add_argument(
         "--pages",
         type=int,
         default=default_pages,
@@ -581,6 +590,7 @@ def _search_arguments(
     return {
         "keywords": query,
         "location": args.location,
+        "distance_km": args.radius_km,
         "max_pages": args.pages,
         "date_posted": args.posted,
         "job_type": args.job_type,
@@ -602,6 +612,7 @@ def _relaxed_search_arguments(
     arguments.update(
         {
             "location": None,
+            "distance_km": None,
             "date_posted": None,
             "job_type": None,
             "experience_level": None,
@@ -991,6 +1002,7 @@ async def _collect_analysis(
                             "job_ids": list(fallback_result.get("job_ids", [])),
                             "relaxed_filters": [
                                 "location",
+                                "distance_km",
                                 "date_posted",
                                 "job_type",
                                 "experience_level",
@@ -1039,6 +1051,11 @@ async def _collect_analysis(
             )
         if company_resolutions:
             search_result["company_filters"] = company_resolutions
+        if args.location:
+            search_result["location_filter"] = {
+                "location": args.location,
+                "radius_km": args.radius_km,
+            }
 
         entries = _job_entries(search_result)
         selected = entries if args.limit == 0 else entries[: args.limit]
@@ -1228,6 +1245,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--resume-queries must be between 1 and 5")
     if getattr(args, "resume_search", False) and not args.profile_file:
         parser.error("--resume-search requires --resume or --profile-file")
+    if (
+        getattr(args, "radius_km", None) is not None
+        and not 0 <= args.radius_km <= 100
+    ):
+        parser.error("--radius-km must be between 0 and 100")
+    if getattr(args, "radius_km", None) is not None and not args.location:
+        parser.error("--radius-km requires --location")
 
     try:
         config = _configure(args)

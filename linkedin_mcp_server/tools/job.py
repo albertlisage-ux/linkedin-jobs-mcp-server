@@ -168,6 +168,7 @@ def register_job_tools(
         keywords: str,
         ctx: Context,
         location: str | None = None,
+        distance_km: Annotated[int, Field(ge=0, le=100)] | None = None,
         max_pages: Annotated[int, Field(ge=1, le=10)] = 3,
         date_posted: str | None = None,
         job_type: str | None = None,
@@ -194,6 +195,7 @@ def register_job_tools(
             keywords: Search keywords (e.g., "software engineer", "data scientist")
             ctx: FastMCP context for progress reporting
             location: Optional location filter (e.g., "San Francisco", "Remote"). Classic search only.
+            distance_km: Optional search radius around location in kilometres (0-100). Classic search only.
             max_pages: Maximum number of result pages to load (1-10, default 3)
             date_posted: Filter by posting date (past_hour, past_24_hours, past_week, past_month)
             job_type: Filter by job type, comma-separated (full_time, part_time, contract, temporary, volunteer, internship, other). Classic search only.
@@ -238,6 +240,7 @@ def register_job_tools(
         result = await extractor.search_jobs(
             keywords,
             location=location,
+            distance_km=distance_km,
             max_pages=max_pages,
             date_posted=date_posted,
             job_type=job_type,

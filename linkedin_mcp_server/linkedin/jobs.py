@@ -232,6 +232,7 @@ class JobReader:
         self,
         keywords: str,
         location: str | None = None,
+        distance_km: int | None = None,
         max_pages: int = 3,
         date_posted: str | None = None,
         job_type: str | None = None,
@@ -251,6 +252,7 @@ class JobReader:
         Args:
             keywords: Search keywords
             location: Optional location filter
+            distance_km: Optional LinkedIn search radius around location
             max_pages: Maximum pages to load (1-10, default 3)
             date_posted: Filter by date posted (past_hour, past_24_hours, past_week, past_month)
             job_type: Filter by job type (full_time, part_time, contract, temporary, volunteer, internship, other)
@@ -269,6 +271,7 @@ class JobReader:
         base_url = build_job_search_url(
             keywords,
             location=location,
+            distance_km=distance_km,
             date_posted=date_posted,
             job_type=job_type,
             experience_level=experience_level,

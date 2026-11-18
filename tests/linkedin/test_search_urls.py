@@ -213,6 +213,13 @@ class TestBuildJobSearchUrl:
             f"{JOBS}keywords=python&f_C=1115,2573558"
         )
 
+    def test_location_distance_includes_nearby_cities(self):
+        assert build_job_search_url(
+            "python",
+            location="Erlangen",
+            distance_km=50,
+        ) == f"{JOBS}keywords=python&location=Erlangen&distance=50"
+
     @pytest.mark.parametrize(
         "date_posted,code",
         [

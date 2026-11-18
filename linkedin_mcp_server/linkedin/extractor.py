@@ -170,6 +170,7 @@ class LinkedInExtractor:
         self,
         keywords: str,
         location: str | None = None,
+        distance_km: int | None = None,
         max_pages: int = 3,
         date_posted: str | None = None,
         job_type: str | None = None,
@@ -184,6 +185,7 @@ class LinkedInExtractor:
         return await self._jobs.search_jobs(
             keywords,
             location=location,
+            distance_km=distance_km,
             max_pages=max_pages,
             date_posted=date_posted,
             job_type=job_type,

@@ -177,6 +177,7 @@ linkedin-jobs-mcp search \
   --company "SAP SE" \
   --company-id 1115,2573558 \
   --location Erlangen \
+  --radius-km 50 \
   --remote \
   --this-week \
   --limit 5 \
@@ -188,6 +189,11 @@ linkedin-jobs-mcp search \
 resolves them to numeric LinkedIn IDs. `--company-id` skips resolution when the
 numeric IDs are already known. Multiple values can be repeated or comma-separated.
 The report records the company name, resolved slug and final LinkedIn ID.
+
+`--radius-km 50` uses LinkedIn's native distance facet around `--location`.
+For Erlangen, LinkedIn therefore includes matching jobs in nearby cities inside
+its 50 km boundary, including Nuremberg, Fürth and other reachable towns,
+without requiring those names to be typed separately.
 
 `--resume-search` detects and ranks skills and domain signals from the resume,
 generates up to five complementary queries, runs them through LinkedIn, removes
@@ -211,6 +217,8 @@ PDFs need OCR first. For example:
 linkedin-jobs-mcp search \
   --resume ~/Downloads/Profile.pdf \
   --resume-search \
+  --location Erlangen \
+  --radius-km 50 \
   --remote \
   --this-week \
   --company Siemens \
@@ -296,6 +304,7 @@ state and references. Feed a returned job ID to `get_job_details`,
 
 - `keywords`
 - `location`
+- `distance_km` (MCP tool) or `--radius-km` (direct CLI): 0-100, requires location
 - `date_posted`: `past_hour`, `past_24_hours`, `past_week`, `past_month`
 - `job_type`: `full_time`, `part_time`, `contract`, `temporary`, `volunteer`, `internship`, `other`
 - `experience_level`: `internship`, `entry`, `associate`, `mid_senior`, `director`, `executive`

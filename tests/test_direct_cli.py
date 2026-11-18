@@ -25,6 +25,7 @@ def test_search_shortcuts_reach_the_job_search_arguments():
     assert direct_cli._search_arguments(args, args.query) == {
         "keywords": "platform engineer",
         "location": "Berlin",
+        "distance_km": None,
         "max_pages": 1,
         "date_posted": "past_week",
         "job_type": None,
@@ -54,6 +55,21 @@ def test_company_options_reach_the_job_search_arguments():
     assert direct_cli._split_filter_values(
         args.company_id
     ) == ["1115", "2573558"]
+
+
+def test_location_radius_reaches_the_job_search_arguments():
+    args = direct_cli.build_parser().parse_args(
+        [
+            "search",
+            "python",
+            "--location",
+            "Erlangen",
+            "--radius-km",
+            "50",
+        ]
+    )
+
+    assert direct_cli._search_arguments(args, args.query)["distance_km"] == 50
 
 
 async def test_company_names_are_resolved_to_linkedin_ids():
@@ -207,6 +223,7 @@ async def test_resume_search_broadens_when_fewer_than_requested_jobs_exist(
         company=[],
         company_id=[],
         location="Erlangen",
+        radius_km=None,
         pages=1,
         posted="past_week",
         job_type=None,
@@ -307,6 +324,7 @@ def test_search_command_prints_results(monkeypatch, capsys):
                 {
                     "keywords": "python",
                     "location": "Berlin",
+                    "distance_km": None,
                     "max_pages": 1,
                     "date_posted": None,
                     "job_type": None,

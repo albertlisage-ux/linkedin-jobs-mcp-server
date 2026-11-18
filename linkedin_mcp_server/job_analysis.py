@@ -1440,6 +1440,7 @@ def analyze_job_fit(
         "search_mode": search_result.get("search_mode", "query"),
         "search_queries": search_result.get("search_queries", [query]),
         "company_filters": search_result.get("company_filters", []),
+        "location_filter": search_result.get("location_filter"),
         "fallback_search": search_result.get("fallback_search"),
         "resume_search_signals": search_result.get(
             "resume_search_signals", {}
@@ -1474,6 +1475,14 @@ def format_fit_report(report: dict[str, Any]) -> str:
             )
             if report.get("company_filters")
             else "Company filter: none"
+        ),
+        (
+            "Location radius: "
+            f'{report["location_filter"]["location"]} '
+            f'({report["location_filter"]["radius_km"]} km)'
+            if report.get("location_filter")
+            and report["location_filter"].get("radius_km") is not None
+            else "Location radius: not set"
         ),
         (
             "Fallback search: "
@@ -1620,6 +1629,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.keyword_mode": "Requested keywords",
         "app.queries_used": "Queries used",
         "app.company_filter": "Company filter",
+        "app.location_radius": "Location radius",
+        "app.not_set": "Not set",
         "app.none": "None",
         "app.fallback_search": "Fallback search",
         "app.fallback_used": (
@@ -1769,6 +1780,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.keyword_mode": "指定关键词",
         "app.queries_used": "使用的搜索词",
         "app.company_filter": "公司筛选",
+        "app.location_radius": "地点半径",
+        "app.not_set": "未设置",
         "app.none": "无",
         "app.fallback_search": "备用搜索",
         "app.fallback_used": "已启用；已放宽地点、发布时间和其他可选筛选条件",
@@ -1907,6 +1920,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         "app.keyword_mode": "Angegebene Suchbegriffe",
         "app.queries_used": "Verwendete Suchanfragen",
         "app.company_filter": "Unternehmensfilter",
+        "app.location_radius": "Standortradius",
+        "app.not_set": "Nicht festgelegt",
         "app.none": "Keine",
         "app.fallback_search": "Ersatzsuche",
         "app.fallback_used": (
@@ -2615,6 +2630,15 @@ def render_fit_report_html(
         if company_filter_values
         else _i18n_span("app.none")
     )
+    location_filter = report.get("location_filter") or {}
+    location_radius_html = (
+        _e(
+            f'{location_filter["location"]} '
+            f'({location_filter["radius_km"]} km)'
+        )
+        if location_filter.get("radius_km") is not None
+        else _i18n_span("app.not_set")
+    )
     fallback_key = (
         "app.fallback_used"
         if (report.get("fallback_search") or {}).get("used")
@@ -2997,6 +3021,7 @@ def render_fit_report_html(
       </div>
       <p class="job-meta"><span data-i18n="app.queries_used">{_e(_i18n_text("app.queries_used"))}</span>: {_e(queries_used)}</p>
       <p class="job-meta"><span data-i18n="app.company_filter">{_e(_i18n_text("app.company_filter"))}</span>: {company_filter_html}</p>
+      <p class="job-meta"><span data-i18n="app.location_radius">{_e(_i18n_text("app.location_radius"))}</span>: {location_radius_html}</p>
       <p class="job-meta"><span data-i18n="app.fallback_search">{_e(_i18n_text("app.fallback_search"))}</span>: <span data-i18n="{fallback_key}">{_e(_i18n_text(fallback_key))}</span></p>
       <p><strong data-i18n="overview.methodology_title">{_e(_i18n_text("overview.methodology_title"))}.</strong>
         <span data-i18n="overview.methodology">{_e(_i18n_text("overview.methodology"))}</span></p>
