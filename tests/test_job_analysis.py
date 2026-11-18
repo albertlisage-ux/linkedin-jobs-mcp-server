@@ -6,6 +6,7 @@ from linkedin_mcp_server.job_analysis import (
     format_fit_report,
     generate_resume_search_queries,
     merge_job_search_results,
+    parse_resume_document,
     render_fit_report_html,
 )
 
@@ -298,6 +299,65 @@ Built analytics pipelines and data products.
     assert "Senior Data Engineer" not in queries
     assert {"Python", "SQL", "Databricks"} <= set(context["skills"])
     assert context["domains"]
+
+
+def test_resume_parser_finds_late_name_headline_and_top_skills():
+    resume = """Contact
+alex.morgan@example.com
+Top Skills
+Azure Databricks
+Apache Spark
+Programmable Logic Controller
+(PLC)
+Languages
+Chinese (Native or Bilingual)
+English (Full Professional)
+Certifications
+Project Management Professional
+(PMP)
+Alex Morgan
+Data Engineer at Example Corp
+Berlin, Germany
+Experience
+Example Corp
+7 years
+Data Engineer
+November 2021 - Present
+"""
+
+    sections = parse_resume_document(resume)
+
+    assert sections["profile_name"] == "Alex Morgan"
+    assert sections["headline"] == "Data Engineer at Example Corp"
+    assert "Azure Databricks" in sections["skills"]
+    assert "Programmable Logic Controller (PLC)" in sections["skills"]
+    assert "7 years" in sections["experience"]
+
+
+def test_resume_query_generation_uses_parsed_top_skills_and_headline():
+    text = """Top Skills
+Azure Databricks
+Apache Spark
+Project Management Professional
+(PMP)
+Alex Morgan
+Data Engineer at Example Corp
+Berlin, Germany
+Experience
+Built Azure Databricks pipelines.
+"""
+    profile = {
+        "sections": {
+            "profile_document": text,
+            **parse_resume_document(text),
+        }
+    }
+
+    context = generate_resume_search_queries(text, limit=2, profile=profile)
+    queries = [item["query"] for item in context["queries"]]
+
+    assert "Azure" in context["skills"]
+    assert any("Azure" in query and "Databricks" in query for query in queries)
 
 
 def test_resume_search_results_are_merged_and_remember_their_query():

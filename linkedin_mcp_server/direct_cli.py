@@ -665,9 +665,15 @@ def _profile_document(path: str) -> dict[str, Any]:
             "The profile file contains no extractable text. "
             "If it is a scanned PDF, run OCR or provide a UTF-8 text file."
         )
+    from linkedin_mcp_server.job_analysis import parse_resume_document
+
+    parsed_sections = parse_resume_document(text)
     return {
         "url": str(profile_path),
-        "sections": {"profile_document": text},
+        "sections": {
+            "profile_document": text,
+            **parsed_sections,
+        },
     }
 
 
@@ -934,6 +940,7 @@ async def _collect_analysis(
             search_context = generate_resume_search_queries(
                 resume_text,
                 limit=args.resume_queries,
+                profile=profile,
             )
             if not search_context["queries"]:
                 raise DirectCommandError(

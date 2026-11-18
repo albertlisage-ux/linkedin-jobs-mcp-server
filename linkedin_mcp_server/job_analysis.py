@@ -337,6 +337,26 @@ _KNOWN_HEADINGS = {
     "职位福利",
 }
 
+_RESUME_HEADINGS: dict[str, str] = {
+    "about": "about",
+    "summary": "summary",
+    "profile": "summary",
+    "experience": "experience",
+    "berufserfahrung": "experience",
+    "work experience": "experience",
+    "top skills": "skills",
+    "skills": "skills",
+    "technical skills": "skills",
+    "languages": "languages",
+    "sprachen": "languages",
+    "certifications": "certifications",
+    "zertifizierungen": "certifications",
+    "education": "education",
+    "ausbildung": "education",
+    "projects": "projects",
+    "projekte": "projects",
+}
+
 
 def _term_pattern(term: str) -> re.Pattern[str]:
     escaped = re.escape(term).replace(r"\ ", r"\s+")
@@ -370,10 +390,47 @@ def generate_resume_search_queries(
     resume_text: str,
     *,
     limit: int = 3,
+    profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build broad skill/domain searches without requiring a job title."""
     limit = max(1, min(5, limit))
-    skill_counts = _count_skill_mentions(resume_text)
+    sections = profile.get("sections") if isinstance(profile, dict) else None
+    if isinstance(sections, dict):
+        searchable_parts = [
+            str(sections.get(name, ""))
+            for name in (
+                "headline",
+                "summary",
+                "about",
+                "skills",
+                "experience",
+                "projects",
+                "certifications",
+            )
+        ]
+        search_source = "\n".join(searchable_parts)
+        if not search_source.strip():
+            search_source = resume_text
+    else:
+        search_source = resume_text
+    skill_counts = _count_skill_mentions(search_source)
+    if isinstance(sections, dict):
+        canonical_by_alias = {
+            alias.casefold(): canonical
+            for canonical, aliases in _SKILL_ALIASES.items()
+            for alias in aliases
+        }
+        for line in _profile_skill_lines(profile):
+            canonical = canonical_by_alias.get(line.casefold())
+            if canonical:
+                skill_counts[canonical] += 3
+                continue
+            matched_terms = _find_skill_terms(line)
+            if matched_terms:
+                for skill in matched_terms:
+                    skill_counts[skill] += 3
+            else:
+                skill_counts[line] += 3
     skills = [
         skill
         for skill, _ in sorted(
@@ -381,7 +438,7 @@ def generate_resume_search_queries(
             key=lambda item: (-item[1], item[0].casefold()),
         )
     ]
-    folded = resume_text.casefold()
+    folded = search_source.casefold()
     domains = sorted(
         (
             domain
@@ -402,7 +459,14 @@ def generate_resume_search_queries(
 
     def add_query(parts: list[str], basis: list[str]) -> None:
         words = [part for part in parts if part]
-        query = " ".join(dict.fromkeys(words))[:80].strip()
+        unique_words: list[str] = []
+        seen_words: set[str] = set()
+        for word in words:
+            folded_word = word.casefold()
+            if folded_word not in seen_words:
+                seen_words.add(folded_word)
+                unique_words.append(word)
+        query = " ".join(unique_words)[:80].strip()
         if not query or query.casefold() in seen:
             return
         seen.add(query.casefold())
@@ -435,10 +499,23 @@ def generate_resume_search_queries(
             add_query([skills[0], domain], [skills[0], domain])
 
     if not query_specs:
-        summary_line = next(
-            (line for line in _clean_lines(resume_text) if len(line) >= 3),
-            "",
-        )
+        summary_line = ""
+        if isinstance(sections, dict):
+            summary_line = str(
+                sections.get("headline")
+                or sections.get("summary")
+                or sections.get("about")
+                or ""
+            ).strip()
+        if not summary_line:
+            summary_line = next(
+                (
+                    line
+                    for line in _clean_lines(search_source)
+                    if len(line) >= 3
+                ),
+                "",
+            )
         if summary_line:
             add_query([summary_line[:60]], ["resume summary"])
 
@@ -544,6 +621,87 @@ def _clean_lines(text: str) -> list[str]:
     return cleaned
 
 
+def parse_resume_document(text: str) -> dict[str, str]:
+    """Turn a text or extracted PDF resume into searchable named sections."""
+    lines = _clean_lines(text)
+    if not lines:
+        return {}
+    sections: dict[str, str] = {}
+    heading_indices: list[tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        section = _RESUME_HEADINGS.get(line.casefold().rstrip(":"))
+        if section:
+            heading_indices.append((index, section))
+
+    for position, (start, section) in enumerate(heading_indices):
+        end = (
+            heading_indices[position + 1][0]
+            if position + 1 < len(heading_indices)
+            else len(lines)
+        )
+        body_lines = lines[start + 1 : end]
+        if section == "skills":
+            merged_lines: list[str] = []
+            for line in body_lines:
+                if line.startswith("(") and merged_lines:
+                    merged_lines[-1] = f"{merged_lines[-1]} {line}"
+                else:
+                    merged_lines.append(line)
+            body_lines = merged_lines
+        body = "\n".join(body_lines).strip()
+        if body:
+            sections.setdefault(section, body)
+
+    contact_lines: list[str] = []
+    first_heading = heading_indices[0][0] if heading_indices else len(lines)
+    for line in lines[:first_heading]:
+        folded = line.casefold()
+        if "@" in line or "linkedin.com/" in folded or line.isdigit():
+            contact_lines.append(line)
+    if contact_lines:
+        sections["contact"] = "\n".join(contact_lines)
+
+    location_index: int | None = None
+    location_pattern = re.compile(
+        r"^[^@,]{2,50},\s*[^,]{2,50}(?:,\s*[^,]{2,50})?$"
+    )
+    for index, line in enumerate(lines[:40]):
+        if (
+            location_pattern.fullmatch(line)
+            and "@" not in line
+            and "http" not in line.casefold()
+        ):
+            location_index = index
+            break
+
+    if location_index is not None:
+        sections["location"] = lines[location_index]
+        if location_index >= 2:
+            name_candidate = lines[location_index - 2]
+            headline_candidate = lines[location_index - 1]
+            if (
+                2 <= len(name_candidate) <= 80
+                and "@" not in name_candidate
+                and name_candidate.casefold() not in _RESUME_HEADINGS
+            ):
+                sections["profile_name"] = name_candidate
+            if 2 <= len(headline_candidate) <= 140:
+                sections["headline"] = headline_candidate
+    if "profile_name" not in sections:
+        for line in lines[: min(12, len(lines))]:
+            folded = line.casefold()
+            if (
+                2 <= len(line) <= 80
+                and "@" not in line
+                and "linkedin.com/" not in folded
+                and folded not in _RESUME_HEADINGS
+                and folded != "contact"
+            ):
+                sections["profile_name"] = line
+                break
+    return sections
+
+
 def _profile_skill_lines(profile: dict[str, Any]) -> list[str]:
     sections = profile.get("sections")
     if not isinstance(sections, dict):
@@ -554,7 +712,14 @@ def _profile_skill_lines(profile: dict[str, Any]) -> list[str]:
 
     out: list[str] = []
     seen: set[str] = set()
-    for line in _clean_lines(skills_text):
+    raw_lines = _clean_lines(skills_text)
+    normalized_lines: list[str] = []
+    for line in raw_lines:
+        if line.startswith("(") and normalized_lines:
+            normalized_lines[-1] = f"{normalized_lines[-1]} {line}"
+        else:
+            normalized_lines.append(line)
+    for line in normalized_lines:
         normalized = line.casefold()
         if normalized in _SKILL_NOISE:
             continue
@@ -912,6 +1077,8 @@ def _profile_name(profile: dict[str, Any]) -> str | None:
     sections = profile.get("sections")
     if not isinstance(sections, dict):
         return None
+    if explicit := sections.get("profile_name"):
+        return str(explicit)
     main = str(sections.get("main_profile") or sections.get("profile_document") or "")
     blocked = {
         "about",
@@ -953,6 +1120,8 @@ def _profile_recent_role(profile: dict[str, Any]) -> str | None:
     sections = profile.get("sections")
     if not isinstance(sections, dict):
         return None
+    if headline := sections.get("headline"):
+        return str(headline)
     experience = str(sections.get("experience") or "")
     blocked = {
         "experience",

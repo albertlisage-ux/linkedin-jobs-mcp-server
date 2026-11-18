@@ -227,6 +227,12 @@ linkedin-jobs-mcp search \
   --html linkedin-jobs-report.html
 ```
 
+Resume reading now builds explicit sections for profile name, headline,
+location, contact, top skills, languages, certifications, experience, education
+and projects. This prevents labels such as `Contact` from being mistaken for the
+person's name and lets LinkedIn “Top Skills” influence query generation before
+the broader experience text.
+
 Use `--json` for the complete structured analysis. If you do not want to read
 the default `experience,skills` sections, adjust them with
 `--profile-sections`.
