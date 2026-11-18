@@ -172,6 +172,20 @@ generates up to five complementary queries, runs them through LinkedIn, removes
 duplicate jobs and analyzes the merged result. The report records the resume
 signals and every query used, so the search remains explainable.
 
+`--resume` accepts UTF-8 `.txt`/`.md` files and text-based PDF resumes. Scanned
+PDFs need OCR first. For example:
+
+```bash
+linkedin-jobs-mcp search \
+  --resume ~/Downloads/Profile.pdf \
+  --resume-search \
+  --remote \
+  --this-week \
+  --limit 5 \
+  --language zh \
+  --html linkedin-jobs-report.html
+```
+
 Use `--json` for the complete structured analysis. If you do not want to read
 the default `experience,skills` sections, adjust them with
 `--profile-sections`.

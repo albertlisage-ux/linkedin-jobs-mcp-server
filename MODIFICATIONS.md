@@ -22,6 +22,8 @@ substantive changes are:
   and German interface translations, full posting details, prioritized skill
   improvement roadmaps, personalized bridge projects and experience-gap action
   plans, plus resume-driven multi-query job search without an exact title.
+- `direct_cli.py`: reads text, Markdown and text-based PDF resumes directly,
+  using pypdf for PDF extraction.
 - `linkedin_mcp_server/update_check.py` and
   `linkedin_mcp_server/error_diagnostics.py`: point release and issue diagnostics
   at this derivative instead of the upstream package.

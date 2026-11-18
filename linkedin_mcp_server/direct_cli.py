@@ -189,13 +189,13 @@ def _add_profile_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--profile-file",
         metavar="PATH",
-        help="Use a UTF-8 resume or profile text file instead of LinkedIn profile.",
+        help="Use a UTF-8 text, Markdown or PDF resume instead of LinkedIn profile.",
     )
     parser.add_argument(
         "--resume",
         dest="profile_file",
         metavar="PATH",
-        help="Alias for --profile-file.",
+        help="Resume path (.txt, .md or text-based .pdf); alias for --profile-file.",
     )
     parser.add_argument(
         "--resume-search",
@@ -559,17 +559,45 @@ def _search_arguments(args: argparse.Namespace, query: str) -> dict[str, Any]:
 
 def _profile_document(path: str) -> dict[str, Any]:
     profile_path = Path(path).expanduser()
+    if not profile_path.exists():
+        raise DirectCommandError(
+            f"Profile file not found: {profile_path}. "
+            "Use --resume with the actual file path."
+        )
     try:
-        text = profile_path.read_text(encoding="utf-8")
+        if profile_path.suffix.casefold() == ".pdf":
+            from pypdf import PdfReader
+
+            reader = PdfReader(str(profile_path))
+            if reader.is_encrypted:
+                raise DirectCommandError(
+                    "The resume PDF is encrypted. Save an unencrypted copy "
+                    "before using --resume."
+                )
+            text = "\n".join(
+                page.extract_text() or "" for page in reader.pages
+            )
+        else:
+            text = profile_path.read_text(encoding="utf-8")
+    except DirectCommandError:
+        raise
     except UnicodeDecodeError as exc:
         raise DirectCommandError(
-            "The profile file must be UTF-8 text. Convert a PDF or Word "
-            "document to plain text before using --profile-file."
+            "The profile file must be UTF-8 text or a text-based PDF. "
+            "Convert scanned PDFs or Word documents to UTF-8 text first."
         ) from exc
     except OSError as exc:
         raise DirectCommandError(f"Could not read profile file: {exc}") from exc
+    except Exception as exc:
+        raise DirectCommandError(
+            f"Could not extract text from {profile_path.name}: {exc}. "
+            "If this is a scanned PDF, run OCR or provide a UTF-8 text file."
+        ) from exc
     if not text.strip():
-        raise DirectCommandError("The profile file is empty.")
+        raise DirectCommandError(
+            "The profile file contains no extractable text. "
+            "If it is a scanned PDF, run OCR or provide a UTF-8 text file."
+        )
     return {
         "url": str(profile_path),
         "sections": {"profile_document": text},

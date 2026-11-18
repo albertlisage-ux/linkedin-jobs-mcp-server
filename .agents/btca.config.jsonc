@@ -203,6 +203,13 @@
       "url": "https://github.com/giampaolo/psutil",
       "branch": "master",
       "specialNotes": "Dev only. The differential harness's process watcher samples the process table with it (tests/differential/watcher.py)."
+    },
+    {
+      "type": "git",
+      "name": "pypdf",
+      "url": "https://github.com/py-pdf/pypdf",
+      "branch": "main",
+      "specialNotes": "Extracts text from PDF resumes in the direct CLI so users do not need a separate pdftotext installation."
     }
   ]
 }

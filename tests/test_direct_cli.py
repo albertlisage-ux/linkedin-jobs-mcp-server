@@ -344,6 +344,45 @@ def test_resume_search_requires_a_resume_file():
     assert raised.value.code == 2
 
 
+def test_profile_document_extracts_text_from_pdf(monkeypatch, tmp_path):
+    import pypdf
+
+    pdf_path = tmp_path / "Profile.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+
+    class Page:
+        def __init__(self, text):
+            self.text = text
+
+        def extract_text(self):
+            return self.text
+
+    class Reader:
+        is_encrypted = False
+        pages = [Page("Python SQL"), Page("Databricks analytics")]
+
+        def __init__(self, path):
+            assert path == str(pdf_path)
+
+    monkeypatch.setattr(pypdf, "PdfReader", Reader)
+
+    profile = direct_cli._profile_document(str(pdf_path))
+
+    assert profile["sections"]["profile_document"] == (
+        "Python SQL\nDatabricks analytics"
+    )
+
+
+def test_profile_document_reports_a_missing_path(tmp_path):
+    missing = tmp_path / "resume.pdf"
+
+    with pytest.raises(
+        direct_cli.DirectCommandError,
+        match="Profile file not found",
+    ):
+        direct_cli._profile_document(str(missing))
+
+
 def test_resume_search_does_not_require_a_job_title(
     monkeypatch, capsys, tmp_path
 ):
