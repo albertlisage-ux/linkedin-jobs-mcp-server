@@ -1504,6 +1504,24 @@ class TestExtractJobIds:
 
         assert "No results rail" in caplog.text
 
+    async def test_redesigned_search_fallback_is_informational(
+        self, mock_page, caplog
+    ):
+        mock_page.url = (
+            "https://www.linkedin.com/jobs/search-results/"
+            "?keywords=Azure%20Databricks&distance=50&f_C=1043"
+        )
+        mock_page.evaluate = AsyncMock(
+            return_value={"ids": ["101", "999"], "scoped": False}
+        )
+        reader = _reader(mock_page)
+
+        with caplog.at_level("INFO"):
+            assert await reader._extract_job_ids(scoped=True) == ["101", "999"]
+
+        assert "Redesigned search has no results rail" in caplog.text
+        assert "No results rail on" not in caplog.text
+
 
 class TestReadEasyApplyForm:
     URL = "https://www.linkedin.com/jobs/view/123/"

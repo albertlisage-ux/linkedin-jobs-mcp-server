@@ -907,10 +907,18 @@ class JobPageReader:
             # loud, because it is the one path where the offset can count
             # something the rail never showed, and it has not been observed:
             # live a search page has two scrollable candidates.
-            logger.warning(
-                "No results rail on %s, reading job ids from the whole document",
-                self._session.page.url,
-            )
+            current_path = urlparse(self._session.page.url).path.rstrip("/")
+            if current_path == "/jobs/search-results":
+                logger.info(
+                    "Redesigned search has no results rail on %s; "
+                    "reading job ids from search cards in the document",
+                    self._session.page.url,
+                )
+            else:
+                logger.warning(
+                    "No results rail on %s, reading job ids from the whole document",
+                    self._session.page.url,
+                )
         return result["ids"]
 
     async def _extract_promoted_job_ids(self, label: str) -> list[str]:
