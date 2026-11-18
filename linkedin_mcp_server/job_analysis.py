@@ -395,6 +395,29 @@ _KNOWN_HEADINGS = {
     "职位福利",
 }
 
+_LISTING_METADATA_RE = re.compile(
+    r"\b("
+    r"ago|today|yesterday|just now|hours?|days?|weeks?|months?|"
+    r"clicked apply|applicants?|people clicked|bewerber|vor \w+"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_NON_COMPANY_HEADER_LINES = {
+    "apply",
+    "easy apply",
+    "full-time",
+    "hybrid",
+    "linkedin",
+    "on-site",
+    "part-time",
+    "promoted",
+    "promoted by hirer",
+    "remote",
+    "save",
+    "show match details",
+}
+
 _RESUME_HEADINGS: dict[str, str] = {
     "about": "about",
     "summary": "summary",
@@ -870,18 +893,60 @@ def _header_parts(
     company: str | None = None
     location: str | None = None
     lines = _clean_lines(job_text)
-    for line in lines[:15]:
-        folded = line.casefold()
-        if folded in _KNOWN_HEADINGS:
+    header = []
+    for line in lines[:30]:
+        if line.casefold().rstrip(":?.") in _KNOWN_HEADINGS:
             break
-        if " · " not in line:
-            continue
-        parts = [part.strip() for part in line.split(" · ") if part.strip()]
-        if len(parts) >= 2:
-            if company is None and parts[0].casefold() != fallback_title.casefold():
-                company = parts[0]
-            location = parts[1]
+        header.append(line)
+
+    metadata_index: int | None = None
+    for index, line in enumerate(header):
+        if " · " in line and _LISTING_METADATA_RE.search(line):
+            metadata_index = index
             break
+
+    if metadata_index is not None:
+        parts = [
+            part.strip()
+            for part in header[metadata_index].split(" · ")
+            if part.strip()
+        ]
+        if parts:
+            first_is_location = (
+                "," in parts[0]
+                or parts[0].casefold() in {"remote", "worldwide"}
+            )
+            if first_is_location:
+                location = parts[0]
+                title_index = metadata_index - 1
+                company_index = title_index - 1
+                candidate = header[company_index] if company_index >= 0 else ""
+                folded = candidate.casefold().strip()
+                if (
+                    candidate
+                    and folded not in _NON_COMPANY_HEADER_LINES
+                    and folded not in _KNOWN_HEADINGS
+                    and "@" not in candidate
+                    and "http" not in folded
+                ):
+                    company = candidate
+            elif len(parts) >= 2:
+                company, location = parts[0], parts[1]
+
+    if company is None:
+        for line in header:
+            if " · " not in line or _LISTING_METADATA_RE.search(line):
+                continue
+            parts = [part.strip() for part in line.split(" · ") if part.strip()]
+            if len(parts) >= 2:
+                company, location = parts[0], parts[1]
+                break
+
+    if location is None:
+        for line in header:
+            if re.fullmatch(r"[^,]{2,50},\s*[^,]{2,50}(?:,\s*[^,]{2,50})?", line):
+                location = line
+                break
     return company, location, None
 
 
@@ -1831,6 +1896,9 @@ def analyze_job_fit(
     )
     gap_counts = Counter(skill for job in jobs for skill in job["missing_skills"])
     rating_counts = Counter(job["fit_rating_key"] for job in jobs)
+    company_counts = Counter(
+        job["company"] for job in jobs if job.get("company")
+    )
     fallback_skills = [
         skill for skill, _ in strength_counts.most_common(6)
     ]
@@ -1905,6 +1973,10 @@ def analyze_job_fit(
             "possible_match": rating_counts["possible_match"],
             "stretch": rating_counts["stretch"],
         },
+        "companies": [
+            {"name": name, "jobs": count}
+            for name, count in company_counts.most_common()
+        ],
         "common_strengths": [
             {"skill": skill, "jobs": count}
             for skill, count in strength_counts.most_common(8)
@@ -2003,6 +2075,11 @@ def format_fit_report(report: dict[str, Any]) -> str:
         lines.append(f"Most repeated strengths: {strengths}")
     if gaps:
         lines.append(f"Most repeated gaps: {gaps}")
+    companies = ", ".join(
+        f'{item["name"]} ({item["jobs"]})'
+        for item in report.get("companies", [])
+    )
+    lines.append(f"Companies in report: {companies or 'not captured'}")
     roadmap = report.get("improvement_roadmap", [])
     if roadmap:
         lines.append(
@@ -2143,6 +2220,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "overview.strengths": "Repeated strengths",
         "overview.gaps": "Repeated gaps",
+        "overview.companies": "Companies in this report",
+        "overview.no_companies": "Company names could not be captured",
         "overview.no_strengths": "No repeated skill matches",
         "overview.no_gaps": "No repeated skill gaps",
         "improvement.title": "Improvement roadmap",
@@ -2300,6 +2379,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "overview.strengths": "重复出现的优势",
         "overview.gaps": "重复出现的差距",
+        "overview.companies": "报告中的公司",
+        "overview.no_companies": "未能捕获公司名称",
         "overview.no_strengths": "没有重复匹配的技能",
         "overview.no_gaps": "没有重复出现的技能差距",
         "improvement.title": "提升路线图",
@@ -2451,6 +2532,8 @@ _REPORT_TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "overview.strengths": "Wiederkehrende Stärken",
         "overview.gaps": "Wiederkehrende Lücken",
+        "overview.companies": "Unternehmen in diesem Bericht",
+        "overview.no_companies": "Unternehmensnamen konnten nicht erfasst werden",
         "overview.no_strengths": "Keine wiederkehrenden Kompetenztreffer",
         "overview.no_gaps": "Keine wiederkehrenden Kompetenzlücken",
         "improvement.title": "Entwicklungsplan",
@@ -3441,6 +3524,18 @@ def render_fit_report_html(
         f"</span>"
         for item in report.get("common_gaps", [])
     )
+    company_chips = "".join(
+        f'<span class="chip">{_e(item["name"])} · '
+        f'<span data-i18n-template="common.jobs_count" '
+        f'data-count="{_e(item["jobs"])}">'
+        f'{_e(item["jobs"])} jobs</span></span>'
+        for item in report.get("companies", [])
+    )
+    companies_panel = (
+        f'<div class="chips">{company_chips}</div>'
+        if company_chips
+        else f'<p class="snapshot">{_i18n_span("overview.no_companies")}</p>'
+    )
     roadmap_cards = "".join(
         f"""
         <article class="roadmap-card">
@@ -3577,6 +3672,10 @@ def render_fit_report_html(
           <div class="chips">{gaps or f'<span class="chip">{_i18n_span("overview.no_gaps")}</span>'}</div>
         </section>
       </div>
+      <section class="panel" style="margin-top:16px">
+        <h3 data-i18n="overview.companies">{_e(_i18n_text("overview.companies"))}</h3>
+        {companies_panel}
+      </section>
     </section>
 
     <section class="section" aria-labelledby="improvement-heading">

@@ -107,6 +107,7 @@ The analysis reads your LinkedIn `experience` and `skills` sections, reads the
 details of the selected postings, and prints:
 
 - an overview with strong, good, review-worthy and stretch matches;
+- the companies represented in the result set and their job counts;
 - repeated strengths and recurring skill gaps;
 - an improvement roadmap prioritized by how many jobs require each gap;
 - concrete learn, build, demonstrate and interview-preparation steps;
@@ -131,6 +132,11 @@ The requirement extractor recognizes English, German and Chinese headings,
 including question-style headings such as `Was bringst Du mit?`. When a posting
 uses no recognizable headings, it falls back to requirement, action-verb and
 benefit cues so relevant text is still surfaced.
+
+Company extraction understands both compact `Company · Location` headers and
+LinkedIn's redesigned multi-line header, where company, title and location are
+separate lines. The HTML overview also lists captured company names with the
+number of analyzed jobs from each.
 
 `search --analyze --html` writes a standalone responsive report containing the
 overview, ranking table and detailed comparison cards. The report opens in

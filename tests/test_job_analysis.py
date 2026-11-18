@@ -161,6 +161,9 @@ def test_html_report_compares_overview_and_details_and_escapes_content():
     assert "Matched profile evidence" in rendered
     assert "Skills not found in profile" in rendered
     assert "Score breakdown" in rendered
+    assert "Companies in this report" in rendered
+    assert "Acme" in rendered
+    assert "Other Co" in rendered
     assert 'data-language="zh"' in rendered
     assert 'data-language="de"' in rendered
     assert "中文" in rendered
@@ -322,6 +325,44 @@ We offer flexible working hours and professional training.
     assert any("Develop reliable" in item for item in job["responsibilities"])
     assert any("three years" in item for item in job["requirements"])
     assert any("flexible working" in item for item in job["benefits"])
+
+
+def test_company_name_is_read_from_separate_header_lines():
+    search = {
+        "job_ids": ["707"],
+        "references": {
+            "search_results": [
+                {
+                    "kind": "job",
+                    "url": "/jobs/view/707/",
+                    "text": "Working Student Data Engineering",
+                }
+            ]
+        },
+    }
+    details = [
+        {
+            "sections": {
+                "job_posting": """Siemens
+Working Student Data Engineering
+Erlangen, Bavaria, Germany · 2 weeks ago · 39 people clicked apply
+Hybrid
+About the job
+Build dashboards with Python and SQL.
+"""
+            }
+        }
+    ]
+
+    job = analyze_job_fit(
+        query="data",
+        search_result=search,
+        profile={"sections": {"skills": "Python\nSQL"}},
+        job_details=details,
+    )["jobs"][0]
+
+    assert job["company"] == "Siemens"
+    assert job["location"] == "Erlangen, Bavaria, Germany"
 
 
 def test_experience_gap_generates_localized_improvement_steps():

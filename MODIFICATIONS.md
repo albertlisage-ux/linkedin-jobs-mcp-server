@@ -32,6 +32,8 @@ substantive changes are:
   language and certification score components.
 - Requirement, responsibility and benefit extraction recognizes punctuation in
   localized headings and falls back to semantic cues when headings are absent.
+- Company extraction supports compact and multi-line LinkedIn headers, and the
+  HTML report includes a company-name count summary.
 - Resume search uses shorter two-term queries and an adaptive fallback that
   relaxes optional filters only after a zero-result search, preserving company
   restrictions and reporting every fallback attempt.
